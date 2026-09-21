@@ -10,6 +10,18 @@ export function getTradieByEmail(email: string) {
   return apiFetch<Tradie>(`/tradies/${encodeURIComponent(email)}`);
 }
 
+// Persists that this tradie has closed the approval-status banner for
+// their CURRENT approvalStatus — see TradiesService.dismissApprovalBanner
+// and the approvalBannerDismissedForStatus field comment on the Tradie
+// type. TradieAuthGuard-protected with a self-only check server-side, same
+// as every other tradie-private route.
+export function dismissApprovalBanner(token: string, email: string) {
+  return apiFetch<Tradie>(`/tradies/${encodeURIComponent(email)}/dismiss-approval-banner`, {
+    method: 'POST',
+    token,
+  });
+}
+
 // Job poster's "Tradies for X" search on a job's detail screen — mirrors
 // job-detail.html's loadMatchingTradies(). `trade` must be the real trade
 // NAME (Tradie.trades element), not the job-facing category label — the
@@ -31,6 +43,7 @@ export function listMatchingTradies(params: { trade?: string; region?: string; s
 export type TeamMember = { firstName: string; lastName?: string; trades?: string[] };
 export type ServiceArea = { region: string; district: string; area: string };
 export type Licence = { label: string; number?: string; expiry?: string; documentUrl?: string };
+export type PortfolioItem = { photoUrl: string; caption?: string };
 export type TradieService = {
   trade?: string;
   name: string;
@@ -67,6 +80,7 @@ export type UpsertTradieInput = {
   endTime?: string;
   acceptsEmergency?: boolean;
   bio?: string;
+  portfolioItems?: PortfolioItem[];
 };
 
 // POST /tradies — see UpsertTradieDto: only `email` is actually required

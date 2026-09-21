@@ -19,6 +19,7 @@ import type { ConversationMessage } from '../../api/types';
 import { openConversation, sendConversationMessage } from '../../api/conversations';
 import { useAuth } from '../../auth/AuthContext';
 import { ApiError } from '../../api/client';
+import ScreenBackground from '../../components/ScreenBackground';
 
 type Props = NativeStackScreenProps<ChatStackParams, 'ChatThread'>;
 
@@ -86,6 +87,7 @@ export default function ChatThreadScreen({ route, navigation }: Props) {
   const mySenderType = role === 'customer' ? 'CUSTOMER' : 'TRADIE';
 
   return (
+    <ScreenBackground>
     <KeyboardAvoidingView
       style={styles.flex}
       behavior={Platform.OS === 'ios' ? 'padding' : undefined}
@@ -153,13 +155,14 @@ export default function ChatThreadScreen({ route, navigation }: Props) {
         </View>
       </SafeAreaView>
     </KeyboardAvoidingView>
+    </ScreenBackground>
   );
 }
 
 const styles = StyleSheet.create({
   flex: { flex: 1 },
-  safe: { flex: 1, backgroundColor: '#F8FAFC' },
-  jobBanner: { paddingHorizontal: 16, paddingVertical: 10, backgroundColor: '#EFF6FF', borderBottomWidth: 1, borderBottomColor: '#DBEAFE' },
+  safe: { flex: 1 },
+  jobBanner: { paddingHorizontal: 16, paddingVertical: 10, backgroundColor: 'rgba(239,246,255,0.92)', borderBottomWidth: 1, borderBottomColor: '#DBEAFE' },
   jobBannerText: { fontSize: 13, color: '#2563EB', fontWeight: '600' },
   list: { padding: 16, gap: 10 },
   systemBubble: { alignSelf: 'center', backgroundColor: '#E2E8F0', borderRadius: 12, paddingHorizontal: 14, paddingVertical: 10, marginBottom: 4, maxWidth: '90%' },

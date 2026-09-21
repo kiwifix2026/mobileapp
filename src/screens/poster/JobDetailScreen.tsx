@@ -1,5 +1,6 @@
 import React from 'react';
 import { View, Text, Pressable, StyleSheet, SafeAreaView, ScrollView, ActivityIndicator, Alert, Linking, Image, Modal } from 'react-native';
+import { Ionicons } from '@expo/vector-icons';
 import type { NativeStackScreenProps } from '@react-navigation/native-stack';
 import { useBottomTabBarHeight } from '@react-navigation/bottom-tabs';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
@@ -12,6 +13,7 @@ import { getSignedUrl } from '../../api/uploads';
 import type { Tradie } from '../../api/types';
 import { useAuth } from '../../auth/AuthContext';
 import { ApiError } from '../../api/client';
+import ScreenBackground from '../../components/ScreenBackground';
 
 type Props = NativeStackScreenProps<PosterStackParamList, 'JobDetail'>;
 
@@ -29,6 +31,39 @@ function tradieDisplayName(t: Tradie): string {
   return t.businessName || [t.firstName, t.lastName].filter(Boolean).join(' ') || 'A tradie';
 }
 
+// A round checkmark icon + "Verified" text, matching the reference mockup
+// (a filled circular badge, not a plain "✓" character) — shared by both the
+// match card and the profile modal header so the two stay visually
+// identical.
+function VerifiedBadge() {
+  return (
+    <View style={styles.verifiedPill}>
+      <View style={styles.verifiedPillIcon}>
+        <Text style={styles.verifiedPillIconText}>✓</Text>
+      </View>
+      <Text style={styles.verifiedPillText}>Verified</Text>
+    </View>
+  );
+}
+
+// Real, explainable match score — built only from genuine fields already on
+// the tradie object, no invented ratings/reviews. This project has an
+// established rule against fabricating data to fill out a design (View
+// Profile's fake business data and the fabricated marketing stats were both
+// pulled for exactly this reason), so every point here traces to something
+// actually true: every tradie in `matchingTradies` already passed the trade
+// filter server-side (TradiesService.findMatching), which is a guaranteed
+// 60 base points; `nearby` is the same real proximity flag that query
+// returns; approval status and emergency-callout availability are the only
+// other real signals on this object worth differentiating on.
+function matchScore(tradie: Tradie): number {
+  let score = 60;
+  if (tradie.nearby) score += 25;
+  if (tradie.approvalStatus === 'APPROVED') score += 10;
+  if (tradie.acceptsEmergency) score += 5;
+  return Math.min(score, 100);
+}
+
 // One card in the "Tradies for X" list — mirrors job-detail.html's
 // renderCard(): Call (tel: link), Invite (unless already applied/accepted
 // on this job), Message, all wired to real backend actions. Its own signed-
@@ -36,6 +71,7 @@ function tradieDisplayName(t: Tradie): string {
 // by key anyway, so N cards for the same photoUrl only fetch once.
 function TradieMatchCard({
   tradie,
+  score,
   applicantStatus,
   onInvite,
   onMessage,
@@ -44,6 +80,7 @@ function TradieMatchCard({
   messagePending,
 }: {
   tradie: Tradie;
+  score: number;
   applicantStatus?: 'PENDING' | 'ACCEPTED' | 'DECLINED';
   onInvite: () => void;
   onMessage: () => void;
@@ -59,6 +96,7 @@ function TradieMatchCard({
   const areaLabel = tradie.serviceAreas?.[0]
     ? `${tradie.serviceAreas[0].area}, ${tradie.serviceAreas[0].region}`
     : 'Area not set';
+  const verified = tradie.approvalStatus === 'APPROVED';
 
   return (
     <View style={styles.matchCard}>
@@ -75,10 +113,17 @@ function TradieMatchCard({
         <View style={{ flex: 1 }}>
           <View style={styles.matchNameRow}>
             <Text style={styles.matchName}>{tradieDisplayName(tradie)}</Text>
-            {tradie.approvalStatus === 'APPROVED' && <Text style={styles.matchVerified}>✓ Verified</Text>}
+            {/* Single verified indicator now — this used to also show a
+                duplicate green checkmark badge overlaid on the avatar's
+                corner, redundant with this same pill right next to the
+                name. */}
+            {verified && <VerifiedBadge />}
           </View>
           {!!tradie.trades?.length && <Text style={styles.matchTrades}>{tradie.trades.join(', ')}</Text>}
           <Text style={styles.matchArea}>📍 {areaLabel}</Text>
+        </View>
+        <View style={styles.matchScorePill}>
+          <Text style={styles.matchScorePillText}>{score}% Match</Text>
         </View>
       </View>
       {/* Call dropped per feedback — phone number's still visible in the
@@ -87,11 +132,13 @@ function TradieMatchCard({
       <View style={styles.matchActions}>
         {applicantStatus === 'ACCEPTED' ? (
           <View style={[styles.actionBtn, styles.actionBtnDisabled]}>
-            <Text style={styles.disabledBtnText}>🚧 In-progress</Text>
+            <Ionicons name="construct-outline" size={14} color="#94A3B8" />
+            <Text style={styles.disabledBtnText}>In-progress</Text>
           </View>
         ) : applicantStatus === 'PENDING' ? (
           <View style={[styles.actionBtn, styles.actionBtnDisabled]}>
-            <Text style={styles.disabledBtnText}>✓ Applied</Text>
+            <Ionicons name="checkmark-circle-outline" size={14} color="#94A3B8" />
+            <Text style={styles.disabledBtnText}>Applied</Text>
           </View>
         ) : (
           <Pressable
@@ -99,8 +146,11 @@ function TradieMatchCard({
             disabled={inviteState !== 'idle'}
             onPress={onInvite}
           >
+            {inviteState !== 'pending' && (
+              <Ionicons name={inviteState === 'sent' ? 'checkmark' : 'mail'} size={14} color="#fff" />
+            )}
             <Text style={styles.inviteBtnText}>
-              {inviteState === 'sent' ? '✓ Invited' : inviteState === 'pending' ? 'Inviting…' : '📋 Invite'}
+              {inviteState === 'sent' ? 'Invited' : inviteState === 'pending' ? 'Inviting…' : 'Invite'}
             </Text>
           </Pressable>
         )}
@@ -109,10 +159,12 @@ function TradieMatchCard({
           disabled={messagePending}
           onPress={onMessage}
         >
-          <Text style={styles.messageBtnText}>💬 Message</Text>
+          <Ionicons name="chatbubble-outline" size={14} color="#16A34A" />
+          <Text style={styles.messageBtnText}>Message</Text>
         </Pressable>
         <Pressable style={[styles.actionBtn, styles.profileBtn]} onPress={onViewProfile}>
-          <Text style={styles.profileBtnText}>👁 Profile</Text>
+          <Ionicons name="eye-outline" size={14} color="#16A34A" />
+          <Text style={styles.profileBtnText}>Profile</Text>
         </Pressable>
       </View>
     </View>
@@ -152,7 +204,7 @@ function TradieProfileModal({ tradie, onClose }: { tradie: Tradie; onClose: () =
           <View style={{ flex: 1 }}>
             <View style={styles.matchNameRow}>
               <Text style={styles.modalName}>{tradieDisplayName(tradie)}</Text>
-              {tradie.approvalStatus === 'APPROVED' && <Text style={styles.matchVerified}>✓ Verified</Text>}
+              {tradie.approvalStatus === 'APPROVED' && <VerifiedBadge />}
             </View>
             <Text style={styles.modalSub}>
               {[tradie.businessName, tradie.hasTeam ? `Team of ${(tradie.teamMembers?.length || 0) + 1}` : null]
@@ -284,6 +336,50 @@ export default function JobDetailScreen({ route, navigation }: Props) {
 
   const [inviteStates, setInviteStates] = React.useState<Record<string, 'idle' | 'pending' | 'sent'>>({});
 
+  // Web's job-detail.html stacks Applicants/In-progress/Matches as three
+  // always-rendered sections in one long scroll — on mobile that meant
+  // scrolling past a big "Tradies for X" list just to see who'd applied, or
+  // vice versa. Same underlying split web already computes client-side from
+  // one applicants list (status === 'ACCEPTED' vs not), just presented as
+  // three switchable tabs instead of three stacked sections.
+  // Defaults to Matches rather than Applicants — a freshly posted job has
+  // no applicants yet, so opening straight to an empty "No applicants yet"
+  // state was a dead end; Matches (who's nearby/eligible) is the
+  // immediately useful thing to see right after posting.
+  const [activeTab, setActiveTab] = React.useState<'applicants' | 'inProgress' | 'matches'>('matches');
+  const inProgressApplicants = React.useMemo(() => (applicants || []).filter((a) => a.status === 'ACCEPTED'), [applicants]);
+  const pendingApplicants = React.useMemo(() => (applicants || []).filter((a) => a.status !== 'ACCEPTED'), [applicants]);
+
+  // TradiesService.findMatching() (backend) returns every APPROVED tradie
+  // offering this trade nationwide, not just ones near the job — `nearby`
+  // is only a sort hint there, never a filter (there's no real lat/lng data
+  // to do actual distance matching on yet, see kiwifix_address_geocoding
+  // memory). Left as-is, that meant a Hamilton job's "Matches" could list a
+  // Wellington tradie above an Auckland one, ordered by nothing more
+  // meaningful than account-creation date. Since this is a backend change
+  // (TradiesService.findMatching lives in the shared, read-only
+  // 2026-kiwifix backend), the fix here is entirely client-side: only keep
+  // tradies the backend already flagged `nearby: true` — same real signal
+  // (their serviceAreas contains this job's exact region or suburb), just
+  // enforced as a hard filter on mobile instead of a soft sort, same as
+  // most marketplace apps only ever showing people who actually cover your
+  // area.
+  const nearbyMatches = React.useMemo(
+    () => (matchingTradies || []).filter((t) => t.nearby),
+    [matchingTradies],
+  );
+  // Ranked by the real matchScore() above — highest-scoring (approved +
+  // emergency-ready, now that everyone here is already nearby) tradies
+  // surface first. Collapsed to the top 3 by default so the tab isn't a
+  // long unranked wall of cards; "View all" reveals the rest in place
+  // rather than navigating away.
+  const sortedMatches = React.useMemo(
+    () => [...nearbyMatches].sort((a, b) => matchScore(b) - matchScore(a)),
+    [nearbyMatches],
+  );
+  const [showAllMatches, setShowAllMatches] = React.useState(false);
+  const visibleMatches = showAllMatches ? sortedMatches : sortedMatches.slice(0, 3);
+
   const invalidate = () => {
     queryClient.invalidateQueries({ queryKey: ['applicants', jobId] });
     queryClient.invalidateQueries({ queryKey: ['job', jobId] });
@@ -342,6 +438,7 @@ export default function JobDetailScreen({ route, navigation }: Props) {
   // with no visible error and no way to retry. Split that out explicitly.
   if (jobIsError) {
     return (
+      <ScreenBackground>
       <SafeAreaView style={styles.safe}>
         <View style={styles.errorState}>
           <Text style={styles.errorStateText}>
@@ -353,20 +450,35 @@ export default function JobDetailScreen({ route, navigation }: Props) {
           </Pressable>
         </View>
       </SafeAreaView>
+      </ScreenBackground>
     );
   }
   if (jobLoading || !job) {
     return (
+      <ScreenBackground>
       <SafeAreaView style={styles.safe}>
         <ActivityIndicator style={{ marginTop: 40 }} />
       </SafeAreaView>
+      </ScreenBackground>
     );
   }
 
   return (
+    <ScreenBackground>
     <SafeAreaView style={styles.safe}>
       <ScrollView contentContainerStyle={[styles.container, { paddingBottom: tabBarHeight + 40 }]}>
-        <Text style={styles.category}>{job.category}</Text>
+        <View style={styles.titleRow}>
+          <Text style={[styles.category, { flex: 1 }]}>{job.category}</Text>
+          {/* Mirrors web's job-detail.html "✎ Edit job" button — same
+              PATCH /jobs/:id edit, just its own screen instead of a
+              toggled inline form (see EditJobScreen.tsx). No status gate:
+              JobsService.update() lets a poster edit at any job status,
+              same as web. */}
+          <Pressable style={styles.editJobBtn} onPress={() => navigation.navigate('EditJob', { jobId })}>
+            <Ionicons name="pencil" size={13} color="#16A34A" />
+            <Text style={styles.editJobBtnText}>Edit</Text>
+          </Pressable>
+        </View>
         <Text style={styles.description}>{job.description}</Text>
         {(job.suburb || job.city) && (
           <Text style={styles.location}>📍 {[job.suburb, job.city].filter(Boolean).join(', ')}</Text>
@@ -388,87 +500,178 @@ export default function JobDetailScreen({ route, navigation }: Props) {
           </View>
         )}
 
-        <Text style={styles.sectionTitle}>Applicants</Text>
-        {applicantsLoading ? (
-          <ActivityIndicator style={{ marginTop: 20 }} />
-        ) : !applicants || applicants.length === 0 ? (
-          <Text style={styles.empty}>No applicants yet — tradies matching this job's category and area will show up here.</Text>
-        ) : (
-          applicants.map((app) => (
-            <View key={app.id} style={styles.applicantCard}>
-              <View style={styles.applicantTop}>
-                <Text style={styles.applicantName}>{applicantName(app)}</Text>
-                <Text style={[styles.applicantStatus, { color: statusColor(app.status) }]}>{app.status}</Text>
+        <View style={styles.tabBar}>
+          {([
+            { key: 'matches' as const, label: 'Matches', icon: 'locate' as const, count: sortedMatches.length },
+            { key: 'inProgress' as const, label: 'In-progress', icon: 'construct' as const, count: inProgressApplicants.length },
+            { key: 'applicants' as const, label: 'Applicants', icon: 'people' as const, count: pendingApplicants.length },
+          ]).map((tab) => {
+            const active = activeTab === tab.key;
+            return (
+              <Pressable key={tab.key} style={styles.tabBtn} onPress={() => setActiveTab(tab.key)}>
+                <View style={styles.tabIconWrap}>
+                  <Ionicons name={active ? tab.icon : (`${tab.icon}-outline` as const)} size={20} color={active ? '#16A34A' : '#94A3B8'} />
+                  {tab.count > 0 && (
+                    <View style={styles.tabBadge}>
+                      <Text style={styles.tabBadgeText}>{tab.count > 99 ? '99+' : tab.count}</Text>
+                    </View>
+                  )}
+                </View>
+                <Text style={[styles.tabText, active && { color: '#16A34A', fontWeight: '800' }]}>{tab.label}</Text>
+                {active && <View style={[styles.tabUnderline, { backgroundColor: '#16A34A' }]} />}
+              </Pressable>
+            );
+          })}
+        </View>
+
+        {activeTab === 'applicants' && (
+          applicantsLoading ? (
+            <ActivityIndicator style={{ marginTop: 20 }} />
+          ) : pendingApplicants.length === 0 ? (
+            <Text style={styles.empty}>No applicants yet — tradies matching this job's category and area will show up here.</Text>
+          ) : (
+            pendingApplicants.map((app) => (
+              <View key={app.id} style={styles.applicantCard}>
+                <View style={styles.applicantTop}>
+                  <Text style={styles.applicantName}>{applicantName(app)}</Text>
+                  <Text style={[styles.applicantStatus, { color: statusColor(app.status) }]}>{app.status}</Text>
+                </View>
+                {app.wasInvited && <Text style={styles.invitedTag}>You invited this tradie</Text>}
+                {app.message ? <Text style={styles.applicantMessage}>"{app.message}"</Text> : null}
+                <View style={styles.applicantActions}>
+                  <Pressable
+                    style={[styles.actionBtn, styles.messageBtn]}
+                    onPress={() => message.mutate(app.tradieId)}
+                    disabled={message.isPending}
+                  >
+                    <Text style={styles.messageBtnText}>Message</Text>
+                  </Pressable>
+                  {app.status === 'PENDING' && (
+                    <>
+                      <Pressable
+                        style={[styles.actionBtn, styles.declineBtn]}
+                        onPress={() => decline.mutate(app.id)}
+                        disabled={decline.isPending || accept.isPending}
+                      >
+                        <Text style={styles.declineBtnText}>Decline</Text>
+                      </Pressable>
+                      <Pressable
+                        style={[styles.actionBtn, styles.acceptBtn]}
+                        onPress={() => accept.mutate(app.id)}
+                        disabled={decline.isPending || accept.isPending}
+                      >
+                        <Text style={styles.acceptBtnText}>Accept</Text>
+                      </Pressable>
+                    </>
+                  )}
+                </View>
               </View>
-              {app.wasInvited && <Text style={styles.invitedTag}>You invited this tradie</Text>}
-              {app.message ? <Text style={styles.applicantMessage}>"{app.message}"</Text> : null}
-              <View style={styles.applicantActions}>
-                <Pressable
-                  style={[styles.actionBtn, styles.messageBtn]}
-                  onPress={() => message.mutate(app.tradieId)}
-                  disabled={message.isPending}
-                >
-                  <Text style={styles.messageBtnText}>Message</Text>
-                </Pressable>
-                {app.status === 'PENDING' && (
-                  <>
-                    <Pressable
-                      style={[styles.actionBtn, styles.declineBtn]}
-                      onPress={() => decline.mutate(app.id)}
-                      disabled={decline.isPending || accept.isPending}
-                    >
-                      <Text style={styles.declineBtnText}>Decline</Text>
-                    </Pressable>
-                    <Pressable
-                      style={[styles.actionBtn, styles.acceptBtn]}
-                      onPress={() => accept.mutate(app.id)}
-                      disabled={decline.isPending || accept.isPending}
-                    >
-                      <Text style={styles.acceptBtnText}>Accept</Text>
-                    </Pressable>
-                  </>
-                )}
-              </View>
-            </View>
-          ))
+            ))
+          )
         )}
 
-        <Text style={styles.sectionTitle}>🔧 Tradies for '{job.category}'</Text>
-        {matchingLoading ? (
-          <ActivityIndicator style={{ marginTop: 20 }} />
-        ) : !matchingTradies || matchingTradies.length === 0 ? (
-          <Text style={styles.empty}>No matching tradies found nearby yet.</Text>
-        ) : (
-          matchingTradies.map((tradie) => (
-            <TradieMatchCard
-              key={tradie.id}
-              tradie={tradie}
-              applicantStatus={applicantStatusByTradieId[tradie.id]}
-              inviteState={inviteStates[tradie.id] || 'idle'}
-              messagePending={message.isPending}
-              onInvite={() => handleInvite(tradie.id)}
-              onMessage={() => message.mutate(tradie.id)}
-              onViewProfile={() => setViewingTradie(tradie)}
-            />
-          ))
+        {activeTab === 'inProgress' && (
+          applicantsLoading ? (
+            <ActivityIndicator style={{ marginTop: 20 }} />
+          ) : inProgressApplicants.length === 0 ? (
+            <Text style={styles.empty}>No one's been accepted for this job yet.</Text>
+          ) : (
+            inProgressApplicants.map((app) => (
+              <View key={app.id} style={styles.applicantCard}>
+                <View style={styles.applicantTop}>
+                  <Text style={styles.applicantName}>{applicantName(app)}</Text>
+                  <Text style={[styles.applicantStatus, { color: statusColor(app.status) }]}>{app.status}</Text>
+                </View>
+                {app.wasInvited && <Text style={styles.invitedTag}>You invited this tradie</Text>}
+                {app.message ? <Text style={styles.applicantMessage}>"{app.message}"</Text> : null}
+                <View style={styles.applicantActions}>
+                  <Pressable
+                    style={[styles.actionBtn, styles.messageBtn]}
+                    onPress={() => message.mutate(app.tradieId)}
+                    disabled={message.isPending}
+                  >
+                    <Text style={styles.messageBtnText}>Message</Text>
+                  </Pressable>
+                </View>
+              </View>
+            ))
+          )
+        )}
+
+        {activeTab === 'matches' && (
+          matchingLoading ? (
+            <ActivityIndicator style={{ marginTop: 20 }} />
+          ) : sortedMatches.length === 0 ? (
+            <Text style={styles.empty}>No tradies covering this job's area yet — check back later as more tradies join.</Text>
+          ) : (
+            <>
+              <View style={styles.matchesHeader}>
+                <Text style={styles.matchesHeaderTitle}>✨ Top Matches</Text>
+                <Text style={styles.matchesHeaderSub}>Tradespeople best suited for your job</Text>
+              </View>
+              {visibleMatches.map((tradie) => (
+                <TradieMatchCard
+                  key={tradie.id}
+                  tradie={tradie}
+                  score={matchScore(tradie)}
+                  applicantStatus={applicantStatusByTradieId[tradie.id]}
+                  inviteState={inviteStates[tradie.id] || 'idle'}
+                  messagePending={message.isPending}
+                  onInvite={() => handleInvite(tradie.id)}
+                  onMessage={() => message.mutate(tradie.id)}
+                  onViewProfile={() => setViewingTradie(tradie)}
+                />
+              ))}
+              {sortedMatches.length > 3 && (
+                <Pressable style={styles.viewAllBtn} onPress={() => setShowAllMatches((v) => !v)}>
+                  <Text style={styles.viewAllText}>
+                    {showAllMatches ? 'Show fewer matches' : `View all ${sortedMatches.length} matches →`}
+                  </Text>
+                </Pressable>
+              )}
+            </>
+          )
         )}
       </ScrollView>
       {viewingTradie && <TradieProfileModal tradie={viewingTradie} onClose={() => setViewingTradie(null)} />}
     </SafeAreaView>
+    </ScreenBackground>
   );
 }
 
 const styles = StyleSheet.create({
-  safe: { flex: 1, backgroundColor: '#fff' },
+  safe: { flex: 1 },
   container: { padding: 20, paddingBottom: 60 },
+  titleRow: { flexDirection: 'row', alignItems: 'flex-start', gap: 10 },
   category: { fontSize: 24, fontWeight: '800', marginBottom: 8 },
+  editJobBtn: { flexDirection: 'row', alignItems: 'center', gap: 5, backgroundColor: '#fff', borderWidth: 1, borderColor: '#BBF7D0', borderRadius: 10, paddingHorizontal: 12, paddingVertical: 7 },
+  editJobBtnText: { color: '#16A34A', fontWeight: '700', fontSize: 13 },
   description: { fontSize: 15, color: '#334155', marginBottom: 12, lineHeight: 22 },
   location: { fontSize: 14, color: '#64748B', marginBottom: 4 },
   urgency: { fontSize: 14, color: '#64748B', marginBottom: 4 },
   sectionTitle: { fontSize: 18, fontWeight: '700', marginTop: 28, marginBottom: 12 },
-  empty: { fontSize: 14, color: '#94A3B8' },
+  empty: { fontSize: 14, color: '#475569', fontWeight: '500', marginTop: 4 },
+  tabBar: {
+    flexDirection: 'row', borderBottomWidth: 1, borderBottomColor: '#E2E8F0', marginTop: 24,
+  },
+  tabBtn: { flex: 1, alignItems: 'center', paddingVertical: 10, position: 'relative' },
+  tabIconWrap: { position: 'relative' },
+  tabIcon: { fontSize: 20 },
+  tabBadge: {
+    position: 'absolute', top: -6, right: -10, minWidth: 16, height: 16, borderRadius: 8,
+    backgroundColor: '#16A34A', alignItems: 'center', justifyContent: 'center', paddingHorizontal: 3,
+  },
+  tabBadgeText: { color: '#fff', fontSize: 9, fontWeight: '800' },
+  tabText: { fontSize: 12, fontWeight: '700', color: '#94A3B8', marginTop: 4 },
+  tabUnderline: { position: 'absolute', bottom: -1, left: 16, right: 16, height: 2, borderRadius: 1 },
+  matchesHeader: { marginTop: 20, marginBottom: 4 },
+  matchesHeaderTitle: { fontSize: 17, fontWeight: '800', color: '#0F172A' },
+  matchesHeaderSub: { fontSize: 13, color: '#64748B', marginTop: 2, marginBottom: 12 },
+  viewAllBtn: { alignItems: 'center', paddingVertical: 12, marginTop: 4 },
+  viewAllText: { color: '#4F46E5', fontWeight: '700', fontSize: 14 },
   applicantCard: {
-    borderWidth: 1, borderColor: '#E2E8F0', borderRadius: 12, padding: 14, marginBottom: 10,
+    backgroundColor: 'rgba(255,255,255,0.94)', borderRadius: 14, padding: 14, marginBottom: 10,
+    shadowColor: '#0F172A', shadowOpacity: 0.05, shadowRadius: 8, shadowOffset: { width: 0, height: 3 }, elevation: 1,
   },
   applicantTop: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
   applicantName: { fontSize: 15, fontWeight: '700', flexShrink: 1, marginRight: 8 },
@@ -476,9 +679,9 @@ const styles = StyleSheet.create({
   invitedTag: { fontSize: 12, color: '#2563EB', fontWeight: '600', marginTop: 4 },
   applicantMessage: { fontSize: 14, color: '#475569', marginTop: 6, fontStyle: 'italic' },
   applicantActions: { flexDirection: 'row', gap: 10, marginTop: 12 },
-  actionBtn: { flex: 1, borderRadius: 10, paddingVertical: 10, alignItems: 'center' },
-  messageBtn: { backgroundColor: '#EFF6FF' },
-  messageBtnText: { color: '#2563EB', fontWeight: '700' },
+  actionBtn: { flex: 1, borderRadius: 10, paddingVertical: 10, alignItems: 'center', justifyContent: 'center', flexDirection: 'row', gap: 5 },
+  messageBtn: { backgroundColor: '#fff', borderWidth: 1, borderColor: '#BBF7D0' },
+  messageBtnText: { color: '#16A34A', fontWeight: '700' },
   declineBtn: { backgroundColor: '#FEF2F2' },
   declineBtnText: { color: '#DC2626', fontWeight: '700' },
   acceptBtn: { backgroundColor: '#16A34A' },
@@ -492,7 +695,8 @@ const styles = StyleSheet.create({
   completedBannerText: { color: '#16A34A', fontWeight: '600', fontSize: 14 },
 
   matchCard: {
-    borderWidth: 1, borderColor: '#E2E8F0', borderRadius: 12, padding: 14, marginBottom: 10,
+    backgroundColor: 'rgba(255,255,255,0.94)', borderRadius: 14, padding: 14, marginBottom: 10,
+    shadowColor: '#0F172A', shadowOpacity: 0.05, shadowRadius: 8, shadowOffset: { width: 0, height: 3 }, elevation: 1,
   },
   matchTop: { flexDirection: 'row', gap: 12, alignItems: 'center' },
   matchAvatar: { width: 48, height: 48, borderRadius: 24, backgroundColor: '#F1F5F9' },
@@ -500,18 +704,28 @@ const styles = StyleSheet.create({
   matchAvatarInitials: { color: '#64748B', fontWeight: '700', fontSize: 15 },
   matchNameRow: { flexDirection: 'row', alignItems: 'center', gap: 6, flexWrap: 'wrap' },
   matchName: { fontSize: 15, fontWeight: '700' },
-  matchVerified: { fontSize: 11, color: '#16A34A', fontWeight: '700' },
+  verifiedPill: { flexDirection: 'row', alignItems: 'center', gap: 3 },
+  verifiedPillIcon: {
+    width: 13, height: 13, borderRadius: 7, backgroundColor: '#16A34A',
+    alignItems: 'center', justifyContent: 'center',
+  },
+  verifiedPillIconText: { color: '#fff', fontSize: 8, fontWeight: '800' },
+  verifiedPillText: { fontSize: 11, color: '#16A34A', fontWeight: '700' },
   matchTrades: { fontSize: 13, color: '#475569', marginTop: 2 },
   matchArea: { fontSize: 12, color: '#94A3B8', marginTop: 2 },
+  matchScorePill: {
+    backgroundColor: '#F0FDF4', borderRadius: 999, paddingHorizontal: 10, paddingVertical: 5, alignSelf: 'flex-start',
+  },
+  matchScorePillText: { color: '#16A34A', fontWeight: '800', fontSize: 12 },
   // Plain single-row flex — the earlier flexWrap + percentage-minWidth
   // 2x2 grid produced a real Yoga layout bug (children stretching to fill
   // leftover cross-axis height unpredictably, some items effectively
   // invisible). Three flex:1 buttons in one row is simple and reliable.
   matchActions: { flexDirection: 'row', gap: 8, marginTop: 12 },
-  inviteBtn: { backgroundColor: '#EEF2FF' },
-  inviteBtnText: { color: '#4338CA', fontWeight: '700', fontSize: 13 },
-  profileBtn: { backgroundColor: '#F8FAFC' },
-  profileBtnText: { color: '#334155', fontWeight: '700', fontSize: 13 },
+  inviteBtn: { backgroundColor: '#16A34A' },
+  inviteBtnText: { color: '#fff', fontWeight: '700', fontSize: 13 },
+  profileBtn: { backgroundColor: '#fff', borderWidth: 1, borderColor: '#BBF7D0' },
+  profileBtnText: { color: '#16A34A', fontWeight: '700', fontSize: 13 },
   actionBtnDisabled: { opacity: 0.5 },
   disabledBtnText: { color: '#94A3B8', fontWeight: '700', fontSize: 13 },
 

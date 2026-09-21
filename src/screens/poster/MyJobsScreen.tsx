@@ -6,11 +6,17 @@ import { useBottomTabBarHeight } from '@react-navigation/bottom-tabs';
 import { useQuery } from '@tanstack/react-query';
 import type { PosterStackParamList } from '../../navigation/types';
 import { listMyJobs } from '../../api/jobs';
+import { listMatchingTradies } from '../../api/tradies';
+import { getApprovedTrades, ApprovedTrade } from '../../api/trades';
 import { useAuth } from '../../auth/AuthContext';
 import type { Job } from '../../api/types';
+import ScreenBackground from '../../components/ScreenBackground';
 
 type Props = NativeStackScreenProps<PosterStackParamList, 'MyJobs'>;
 
+// OPEN no longer shows this — see JobMatchesBadge below, which replaces it
+// with a live "Matches (N)" count. Left in the Record so TS still requires
+// every status to have a label (MATCHED/COMPLETED/CANCELLED still use it).
 const STATUS_LABEL: Record<Job['status'], string> = {
   OPEN: 'Looking for a tradie',
   MATCHED: 'Tradie assigned',
@@ -23,6 +29,40 @@ const STATUS_COLOR: Record<Job['status'], string> = {
   COMPLETED: '#64748B',
   CANCELLED: '#DC2626',
 };
+
+// OPEN jobs' badge — real matching-tradie count instead of the static
+// "Looking for a tradie" label, so a poster can see at a glance whether
+// anyone's even eligible for the job without opening it. Same query
+// JobDetailScreen's Matches tab is built on (TradiesService.findMatching
+// via listMatchingTradies) — just the count, not a fabricated number.
+// Same jobLabel→trade name lookup JobDetailScreen already does, needed
+// because the backend matches on the real trade name, not the job-facing
+// category label shown on the card.
+function JobMatchesBadge({ job, approvedTrades }: { job: Job; approvedTrades?: ApprovedTrade[] }) {
+  const tradeName = useMemo(() => {
+    const match = approvedTrades?.find((t) => t.jobLabel === job.category || t.name === job.category);
+    return match?.name || job.category;
+  }, [approvedTrades, job.category]);
+
+  const { data: matchingTradies } = useQuery({
+    queryKey: ['matchingTradies', job.id, tradeName, job.region, job.suburb],
+    queryFn: () => listMatchingTradies({ trade: tradeName, region: job.region || undefined, suburb: job.suburb || undefined }),
+    enabled: !!tradeName,
+  });
+  // Same hard filter as JobDetailScreen's Matches tab — the backend
+  // returns every APPROVED tradie nationwide for this trade (nearby is
+  // only a sort hint there, not a filter), so this count would otherwise
+  // include tradies who don't actually cover this job's area at all.
+  const count = matchingTradies?.filter((t) => t.nearby).length;
+
+  return (
+    <View style={[styles.badge, { backgroundColor: STATUS_COLOR.OPEN + '22' }]}>
+      <Text style={[styles.badgeText, { color: STATUS_COLOR.OPEN }]}>
+        {count === undefined ? 'Matches' : `Matches (${count})`}
+      </Text>
+    </View>
+  );
+}
 
 type Filter = 'ALL' | 'OPEN' | 'MATCHED' | 'COMPLETED';
 const FILTERS: { key: Filter; label: string }[] = [
@@ -43,6 +83,10 @@ export default function MyJobsScreen({ navigation }: Props) {
     queryKey: ['myJobs'],
     queryFn: () => listMyJobs(token),
   });
+  const { data: approvedTrades } = useQuery({
+    queryKey: ['approvedTrades'],
+    queryFn: getApprovedTrades,
+  });
 
   // Jobs tab root — stays mounted across tab switches. Same reasoning as
   // HomeScreen's identical fix (see kiwifix_mobile_stale_bottomtab_screens
@@ -61,6 +105,7 @@ export default function MyJobsScreen({ navigation }: Props) {
   }, [jobs, filter]);
 
   return (
+    <ScreenBackground>
     <SafeAreaView style={styles.safe}>
       <View style={styles.header}>
         <Text style={styles.headerTitle}>My Jobs</Text>
@@ -91,10 +136,14 @@ export default function MyJobsScreen({ navigation }: Props) {
           renderItem={({ item }) => (
             <Pressable style={styles.card} onPress={() => navigation.navigate('JobDetail', { jobId: item.id })}>
               <View style={styles.cardTop}>
-                <Text style={styles.cardCategory}>{item.category}</Text>
-                <View style={[styles.badge, { backgroundColor: STATUS_COLOR[item.status] + '22' }]}>
-                  <Text style={[styles.badgeText, { color: STATUS_COLOR[item.status] }]}>{STATUS_LABEL[item.status]}</Text>
-                </View>
+                <Text style={styles.cardCategory} numberOfLines={1}>{item.category}</Text>
+                {item.status === 'OPEN' ? (
+                  <JobMatchesBadge job={item} approvedTrades={approvedTrades} />
+                ) : (
+                  <View style={[styles.badge, { backgroundColor: STATUS_COLOR[item.status] + '22' }]}>
+                    <Text style={[styles.badgeText, { color: STATUS_COLOR[item.status] }]}>{STATUS_LABEL[item.status]}</Text>
+                  </View>
+                )}
               </View>
               <Text style={styles.cardDescription} numberOfLines={2}>{item.description}</Text>
               {(item.suburb || item.city) && (
@@ -114,11 +163,12 @@ export default function MyJobsScreen({ navigation }: Props) {
         <Text style={styles.fabText}>+ Post a Job</Text>
       </Pressable>
     </SafeAreaView>
+    </ScreenBackground>
   );
 }
 
 const styles = StyleSheet.create({
-  safe: { flex: 1, backgroundColor: '#F8FAFC' },
+  safe: { flex: 1 },
   header: {
     paddingHorizontal: 20, paddingTop: 8, paddingBottom: 12,
   },
@@ -126,7 +176,8 @@ const styles = StyleSheet.create({
   filterRow: { flexDirection: 'row', gap: 8, paddingHorizontal: 16, paddingBottom: 12, flexWrap: 'wrap' },
   filterChip: {
     paddingHorizontal: 14, paddingVertical: 8, borderRadius: 20,
-    borderWidth: 1, borderColor: '#E2E8F0', backgroundColor: '#fff',
+    backgroundColor: 'rgba(255,255,255,0.9)',
+    shadowColor: '#0F172A', shadowOpacity: 0.05, shadowRadius: 6, shadowOffset: { width: 0, height: 2 }, elevation: 1,
   },
   filterChipActive: { backgroundColor: '#16A34A', borderColor: '#16A34A' },
   filterChipText: { fontSize: 13, fontWeight: '600', color: '#334155' },
@@ -134,14 +185,17 @@ const styles = StyleSheet.create({
   list: { paddingHorizontal: 16, paddingBottom: 100 },
   empty: { alignItems: 'center', marginTop: 60, gap: 4 },
   emptyText: { fontSize: 16, fontWeight: '600', color: '#334155' },
-  emptySubtext: { fontSize: 14, color: '#94A3B8' },
+  emptySubtext: { fontSize: 14, color: '#475569', fontWeight: '500' },
   card: {
-    backgroundColor: '#fff', borderRadius: 14, padding: 16, marginBottom: 12,
-    borderWidth: 1, borderColor: '#E2E8F0',
+    backgroundColor: 'rgba(255,255,255,0.94)', borderRadius: 16, padding: 16, marginBottom: 12,
+    shadowColor: '#0F172A', shadowOpacity: 0.06, shadowRadius: 12, shadowOffset: { width: 0, height: 4 }, elevation: 2,
   },
+  // Same overlap fix as HomeScreen's identical card markup — a long
+  // category used to push the status badge off the card/screen edge since
+  // neither side could give way in the unwrapped row.
   cardTop: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 6 },
-  cardCategory: { fontSize: 16, fontWeight: '700' },
-  badge: { paddingHorizontal: 8, paddingVertical: 4, borderRadius: 8 },
+  cardCategory: { fontSize: 16, fontWeight: '700', flex: 1, marginRight: 8 },
+  badge: { paddingHorizontal: 8, paddingVertical: 4, borderRadius: 8, flexShrink: 0 },
   badgeText: { fontSize: 12, fontWeight: '700' },
   cardDescription: { fontSize: 14, color: '#475569', marginBottom: 6 },
   cardLocation: { fontSize: 13, color: '#94A3B8' },

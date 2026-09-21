@@ -22,6 +22,7 @@ import { uploadPhoto } from '../../api/uploads';
 import { useAuth } from '../../auth/AuthContext';
 import { ApiError } from '../../api/client';
 import AddressAutocompleteField, { ConfirmedAddress } from '../../components/AddressAutocompleteField';
+import ScreenBackground from '../../components/ScreenBackground';
 
 type Props = NativeStackScreenProps<PosterStackParamList, 'PostJob'>;
 
@@ -250,6 +251,7 @@ export default function PostJobScreen({ navigation }: Props) {
   }
 
   return (
+    <ScreenBackground>
     <SafeAreaView style={styles.safe}>
       <View style={styles.stepperHeader}>
         <Pressable onPress={goBack}><Text style={styles.backArrow}>←</Text></Pressable>
@@ -494,12 +496,13 @@ export default function PostJobScreen({ navigation }: Props) {
         </View>
       </View>
     </SafeAreaView>
+    </ScreenBackground>
   );
 }
 
 const styles = StyleSheet.create({
-  safe: { flex: 1, backgroundColor: '#fff' },
-  stepperHeader: { flexDirection: 'row', alignItems: 'center', paddingHorizontal: 20, paddingTop: 8 },
+  safe: { flex: 1 },
+  stepperHeader: { flexDirection: 'row', alignItems: 'center', paddingHorizontal: 20, paddingTop: 8, paddingBottom: 10, backgroundColor: 'rgba(255,255,255,0.7)' },
   backArrow: { fontSize: 22, color: '#0F172A', fontWeight: '700' },
   stepperCount: { fontSize: 12, color: '#94A3B8', fontWeight: '600' },
   stepperLabel: { fontSize: 18, fontWeight: '800', color: '#0F172A', marginTop: 2 },
@@ -510,11 +513,11 @@ const styles = StyleSheet.create({
   container: { padding: 20, paddingBottom: 40, gap: 4 },
   label: { fontSize: 14, fontWeight: '700', marginTop: 20, marginBottom: 8, color: '#334155' },
   input: {
-    borderWidth: 1, borderColor: '#E2E8F0', borderRadius: 12,
+    borderWidth: 1, borderColor: '#E2E8F0', borderRadius: 12, backgroundColor: 'rgba(255,255,255,0.95)',
     paddingHorizontal: 14, paddingVertical: 12, fontSize: 15,
   },
   textarea: {
-    borderWidth: 1, borderColor: '#E2E8F0', borderRadius: 12,
+    borderWidth: 1, borderColor: '#E2E8F0', borderRadius: 12, backgroundColor: 'rgba(255,255,255,0.95)',
     paddingHorizontal: 14, paddingVertical: 12, fontSize: 15, minHeight: 100, textAlignVertical: 'top',
   },
   searchWrap: { position: 'relative', zIndex: 10 },
@@ -585,8 +588,11 @@ const styles = StyleSheet.create({
   photoAddIcon: { fontSize: 20 },
   photoAddText: { fontSize: 11, color: '#64748B', marginTop: 2 },
   error: { color: '#DC2626', fontSize: 13, marginTop: 16 },
-  hint: { color: '#94A3B8', fontSize: 12, marginTop: 6 },
-  reviewCard: { borderWidth: 1, borderColor: '#E2E8F0', borderRadius: 12, padding: 14, marginTop: 10 },
+  hint: { color: '#475569', fontWeight: '500', fontSize: 12, marginTop: 6 },
+  reviewCard: {
+    backgroundColor: 'rgba(255,255,255,0.94)', borderRadius: 14, padding: 14, marginTop: 10,
+    shadowColor: '#0F172A', shadowOpacity: 0.05, shadowRadius: 8, shadowOffset: { width: 0, height: 3 }, elevation: 1,
+  },
   reviewLabel: { fontSize: 12, fontWeight: '700', color: '#94A3B8', textTransform: 'uppercase', marginBottom: 4 },
   reviewValue: { fontSize: 14, color: '#0F172A', fontWeight: '600' },
   footer: { padding: 16, paddingBottom: 24, borderTopWidth: 1, borderTopColor: '#E2E8F0', backgroundColor: '#fff' },

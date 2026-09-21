@@ -8,6 +8,7 @@ import type { ChatStackParams } from '../../navigation/types';
 import type { ConversationSummary } from '../../api/types';
 import { listConversations } from '../../api/conversations';
 import { useAuth } from '../../auth/AuthContext';
+import ScreenBackground from '../../components/ScreenBackground';
 
 type Props = NativeStackScreenProps<ChatStackParams, 'Conversations'>;
 
@@ -52,6 +53,7 @@ export default function ConversationsListScreen({ navigation }: Props) {
   );
 
   return (
+    <ScreenBackground>
     <SafeAreaView style={styles.safe}>
       {isLoading ? (
         <ActivityIndicator style={{ marginTop: 40 }} />
@@ -98,16 +100,17 @@ export default function ConversationsListScreen({ navigation }: Props) {
         />
       )}
     </SafeAreaView>
+    </ScreenBackground>
   );
 }
 
 const styles = StyleSheet.create({
-  safe: { flex: 1, backgroundColor: '#F8FAFC' },
+  safe: { flex: 1 },
   list: { padding: 16 },
-  empty: { fontSize: 14, color: '#94A3B8', textAlign: 'center', marginTop: 60 },
+  empty: { fontSize: 14, color: '#475569', fontWeight: '500', textAlign: 'center', marginTop: 60 },
   card: {
-    backgroundColor: '#fff', borderRadius: 14, padding: 16, marginBottom: 12,
-    borderWidth: 1, borderColor: '#E2E8F0',
+    backgroundColor: 'rgba(255,255,255,0.94)', borderRadius: 16, padding: 16, marginBottom: 12,
+    shadowColor: '#0F172A', shadowOpacity: 0.06, shadowRadius: 12, shadowOffset: { width: 0, height: 4 }, elevation: 2,
   },
   cardTop: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
   name: { fontSize: 16, fontWeight: '700', flexShrink: 1 },

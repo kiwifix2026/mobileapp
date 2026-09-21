@@ -1,5 +1,5 @@
 import React from 'react';
-import { Text } from 'react-native';
+import { Ionicons } from '@expo/vector-icons';
 import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
 import { createNativeStackNavigator } from '@react-navigation/native-stack';
 import { getFocusedRouteNameFromRoute } from '@react-navigation/native';
@@ -38,6 +38,10 @@ function HomeStack() {
           Stack.Navigator, so it needs to exist in both Home and Jobs. */}
       <Stack.Screen name="MyApplications" component={MyApplicationsScreen} options={{ title: 'My Applications' }} />
       <Stack.Screen name="TradieJobInvites" component={TradieJobInvitesScreen} options={{ title: 'Job Invites' }} />
+      {/* Now reached via the bell icon in BrowseJobsScreen's header (was
+          previously only reachable from the Profile tab menu, where it was
+          easy to miss — see ProfileMenuScreen.tsx). */}
+      <Stack.Screen name="Notifications" component={NotificationsScreen} options={{ title: 'Notifications' }} />
       <Stack.Screen name="TradieJobDetail" component={TradieJobDetailScreen} options={{ title: 'Job Details' }} />
       <Stack.Screen name="ChatThread" component={ChatThreadScreen} options={{ title: '' }} />
     </Stack.Navigator>
@@ -67,21 +71,19 @@ function ProfileStack() {
       <Stack.Screen name="ProfileMenu" component={ProfileMenuScreen} options={{ headerShown: false }} />
       <Stack.Screen name="ViewProfile" component={ViewProfileScreen} options={{ title: 'My Profile' }} />
       <Stack.Screen name="EditProfile" component={EditProfileScreen} options={{ title: 'Edit Profile' }} />
-      <Stack.Screen name="Notifications" component={NotificationsScreen} options={{ title: 'Notifications' }} />
-      {/* Notifications can push straight into a job's details (see its
-          jobId link) — registered here too so that still works from the
-          Profile tab, not just Home/Jobs. */}
       <Stack.Screen name="TradieJobDetail" component={TradieJobDetailScreen} options={{ title: 'Job Details' }} />
       <Stack.Screen name="ChatThread" component={ChatThreadScreen} options={{ title: '' }} />
     </Stack.Navigator>
   );
 }
 
-const TAB_ICONS: Record<keyof TradieTabParamList, string> = {
-  HomeTab: '🏠',
-  JobsTab: '📋',
-  MessagesTab: '💬',
-  ProfileTab: '👤',
+// Same outline/filled Ionicons swap as PosterNavigator.tsx — see its
+// TAB_ICONS comment for why the old plain-emoji tab bar was replaced.
+const TAB_ICONS: Record<keyof TradieTabParamList, { active: keyof typeof Ionicons.glyphMap; inactive: keyof typeof Ionicons.glyphMap }> = {
+  HomeTab: { active: 'home', inactive: 'home-outline' },
+  JobsTab: { active: 'briefcase', inactive: 'briefcase-outline' },
+  MessagesTab: { active: 'chatbubble-ellipses', inactive: 'chatbubble-ellipses-outline' },
+  ProfileTab: { active: 'person', inactive: 'person-outline' },
 };
 const TAB_LABELS: Record<keyof TradieTabParamList, string> = {
   HomeTab: 'Home',
@@ -117,7 +119,10 @@ export default function TradieNavigator() {
           tabBarActiveTintColor: '#16A34A',
           tabBarInactiveTintColor: '#94A3B8',
           tabBarLabel: TAB_LABELS[route.name as keyof TradieTabParamList],
-          tabBarIcon: ({ color }) => <Text style={{ fontSize: 20, color }}>{TAB_ICONS[route.name as keyof TradieTabParamList]}</Text>,
+          tabBarIcon: ({ color, focused }) => {
+            const icons = TAB_ICONS[route.name as keyof TradieTabParamList];
+            return <Ionicons name={focused ? icons.active : icons.inactive} size={22} color={color} />;
+          },
           tabBarStyle: FULL_SCREEN_ROUTES.has(focusedRouteName) ? { display: 'none' } : undefined,
         };
       }}

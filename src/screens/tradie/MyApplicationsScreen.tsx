@@ -7,6 +7,7 @@ import { useQuery } from '@tanstack/react-query';
 import type { TradieStackParamList } from '../../navigation/types';
 import { listMyApplications } from '../../api/jobs';
 import { useAuth } from '../../auth/AuthContext';
+import ScreenBackground from '../../components/ScreenBackground';
 
 type Props = NativeStackScreenProps<TradieStackParamList, 'MyApplications'>;
 
@@ -78,6 +79,7 @@ export default function MyApplicationsScreen({ route, navigation }: Props) {
       : 'You haven\'t applied to any jobs yet.';
 
   return (
+    <ScreenBackground>
     <SafeAreaView style={styles.safe}>
       {isLoading ? (
         <ActivityIndicator style={{ marginTop: 40 }} />
@@ -116,7 +118,7 @@ export default function MyApplicationsScreen({ route, navigation }: Props) {
               onPress={() => item.job?.id && navigation.navigate('TradieJobDetail', { jobId: item.job.id })}
             >
               <View style={styles.cardTop}>
-                <Text style={styles.cardCategory}>{item.job?.category || 'Job'}</Text>
+                <Text style={styles.cardCategory} numberOfLines={1}>{item.job?.category || 'Job'}</Text>
                 <Text style={[styles.status, { color: statusColor(shownStatus) }]}>
                   {shownStatus === 'COMPLETED' ? '✅ Completed' : shownStatus}
                 </Text>
@@ -133,20 +135,23 @@ export default function MyApplicationsScreen({ route, navigation }: Props) {
         />
       )}
     </SafeAreaView>
+    </ScreenBackground>
   );
 }
 
 const styles = StyleSheet.create({
-  safe: { flex: 1, backgroundColor: '#F8FAFC' },
+  safe: { flex: 1 },
   list: { padding: 16, paddingTop: 20 },
-  empty: { fontSize: 14, color: '#94A3B8', textAlign: 'center', marginTop: 60 },
+  empty: { fontSize: 14, color: '#475569', fontWeight: '500', textAlign: 'center', marginTop: 60 },
   card: {
-    backgroundColor: '#fff', borderRadius: 14, padding: 16, marginBottom: 12,
-    borderWidth: 1, borderColor: '#E2E8F0',
+    backgroundColor: 'rgba(255,255,255,0.94)', borderRadius: 16, padding: 16, marginBottom: 12,
+    shadowColor: '#0F172A', shadowOpacity: 0.06, shadowRadius: 12, shadowOffset: { width: 0, height: 4 }, elevation: 2,
   },
+  // Same fix as the poster-side Home/MyJobs cards — a long job category
+  // used to push the status text off the card with no way to shrink/wrap.
   cardTop: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 6 },
-  cardCategory: { fontSize: 16, fontWeight: '700' },
-  status: { fontSize: 12, fontWeight: '700' },
+  cardCategory: { fontSize: 16, fontWeight: '700', flex: 1, marginRight: 8 },
+  status: { fontSize: 12, fontWeight: '700', flexShrink: 0 },
   cardDescription: { fontSize: 14, color: '#475569', marginBottom: 6 },
   revealedAddress: { fontSize: 13, color: '#16A34A', fontWeight: '600', marginTop: 4 },
   message: { fontSize: 13, color: '#94A3B8', fontStyle: 'italic', marginTop: 6 },

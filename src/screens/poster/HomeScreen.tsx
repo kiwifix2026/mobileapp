@@ -1,15 +1,21 @@
-import React, { useCallback } from 'react';
+import React, { useCallback, useMemo } from 'react';
 import { View, Text, Pressable, StyleSheet, SafeAreaView, ScrollView, ActivityIndicator, RefreshControl } from 'react-native';
 import type { NativeStackScreenProps } from '@react-navigation/native-stack';
 import { useFocusEffect } from '@react-navigation/native';
 import { useQuery } from '@tanstack/react-query';
 import type { PosterStackParamList } from '../../navigation/types';
 import { listMyJobs } from '../../api/jobs';
+import { listMatchingTradies } from '../../api/tradies';
+import { getApprovedTrades, ApprovedTrade } from '../../api/trades';
 import { useAuth } from '../../auth/AuthContext';
 import type { Job } from '../../api/types';
+import ScreenBackground from '../../components/ScreenBackground';
 
 type Props = NativeStackScreenProps<PosterStackParamList, 'Home'>;
 
+// OPEN no longer shows this — see JobMatchesBadge below, which replaces it
+// with a live "Matches (N)" count. Left in the Record so TS still requires
+// every status to have a label (MATCHED/COMPLETED/CANCELLED still use it).
 const STATUS_LABEL: Record<Job['status'], string> = {
   OPEN: 'Looking for a tradie',
   MATCHED: 'Tradie assigned',
@@ -22,6 +28,40 @@ const STATUS_COLOR: Record<Job['status'], string> = {
   COMPLETED: '#64748B',
   CANCELLED: '#DC2626',
 };
+
+// OPEN jobs' badge — real matching-tradie count instead of the static
+// "Looking for a tradie" label. Same query JobDetailScreen's Matches tab is
+// built on (TradiesService.findMatching via listMatchingTradies), just the
+// count — not a fabricated number. Same jobLabel→trade name lookup as
+// there too, since the backend matches on the real trade name, not the
+// job-facing category label shown on the card. Identical to MyJobsScreen's
+// JobMatchesBadge — kept as a separate copy per this app's existing
+// per-screen card pattern (see kiwifix_duplicated_page_sidebars memory).
+function JobMatchesBadge({ job, approvedTrades }: { job: Job; approvedTrades?: ApprovedTrade[] }) {
+  const tradeName = useMemo(() => {
+    const match = approvedTrades?.find((t) => t.jobLabel === job.category || t.name === job.category);
+    return match?.name || job.category;
+  }, [approvedTrades, job.category]);
+
+  const { data: matchingTradies } = useQuery({
+    queryKey: ['matchingTradies', job.id, tradeName, job.region, job.suburb],
+    queryFn: () => listMatchingTradies({ trade: tradeName, region: job.region || undefined, suburb: job.suburb || undefined }),
+    enabled: !!tradeName,
+  });
+  // Same hard filter as JobDetailScreen's Matches tab — the backend
+  // returns every APPROVED tradie nationwide for this trade (nearby is
+  // only a sort hint there, not a filter), so this count would otherwise
+  // include tradies who don't actually cover this job's area at all.
+  const count = matchingTradies?.filter((t) => t.nearby).length;
+
+  return (
+    <View style={[styles.badge, { backgroundColor: STATUS_COLOR.OPEN + '22' }]}>
+      <Text style={[styles.badgeText, { color: STATUS_COLOR.OPEN }]}>
+        {count === undefined ? 'Matches' : `Matches (${count})`}
+      </Text>
+    </View>
+  );
+}
 
 // Job poster's "Home" tab — a real dashboard (greeting, big Post a Job CTA,
 // recent jobs preview) rather than the full posted-jobs list, which now
@@ -37,6 +77,10 @@ export default function HomeScreen({ navigation }: Props) {
   const { data: jobs, isLoading, refetch, isRefetching } = useQuery({
     queryKey: ['myJobs'],
     queryFn: () => listMyJobs(token),
+  });
+  const { data: approvedTrades } = useQuery({
+    queryKey: ['approvedTrades'],
+    queryFn: getApprovedTrades,
   });
 
   // This is the Home tab's root — stays mounted across tab switches, so
@@ -55,6 +99,7 @@ export default function HomeScreen({ navigation }: Props) {
   const activeCount = (jobs || []).filter((j) => j.status === 'OPEN' || j.status === 'MATCHED').length;
 
   return (
+    <ScreenBackground>
     <SafeAreaView style={styles.safe}>
       <ScrollView
         contentContainerStyle={styles.scroll}
@@ -96,10 +141,14 @@ export default function HomeScreen({ navigation }: Props) {
           recent.map((item) => (
             <Pressable key={item.id} style={styles.card} onPress={() => navigation.navigate('JobDetail', { jobId: item.id })}>
               <View style={styles.cardTop}>
-                <Text style={styles.cardCategory}>{item.category}</Text>
-                <View style={[styles.badge, { backgroundColor: STATUS_COLOR[item.status] + '22' }]}>
-                  <Text style={[styles.badgeText, { color: STATUS_COLOR[item.status] }]}>{STATUS_LABEL[item.status]}</Text>
-                </View>
+                <Text style={styles.cardCategory} numberOfLines={1}>{item.category}</Text>
+                {item.status === 'OPEN' ? (
+                  <JobMatchesBadge job={item} approvedTrades={approvedTrades} />
+                ) : (
+                  <View style={[styles.badge, { backgroundColor: STATUS_COLOR[item.status] + '22' }]}>
+                    <Text style={[styles.badgeText, { color: STATUS_COLOR[item.status] }]}>{STATUS_LABEL[item.status]}</Text>
+                  </View>
+                )}
               </View>
               <Text style={styles.cardDescription} numberOfLines={2}>{item.description}</Text>
               {(item.suburb || item.city) && (
@@ -110,11 +159,12 @@ export default function HomeScreen({ navigation }: Props) {
         )}
       </ScrollView>
     </SafeAreaView>
+    </ScreenBackground>
   );
 }
 
 const styles = StyleSheet.create({
-  safe: { flex: 1, backgroundColor: '#F8FAFC' },
+  safe: { flex: 1 },
   scroll: { padding: 20, paddingBottom: 40 },
   greeting: { fontSize: 24, fontWeight: '800', color: '#0F172A' },
   greetingSub: { fontSize: 14, color: '#64748B', marginTop: 2, marginBottom: 18 },
@@ -131,22 +181,30 @@ const styles = StyleSheet.create({
   postCardSub: { color: 'rgba(255,255,255,0.85)', fontSize: 12, marginTop: 2 },
   postCardArrow: { color: '#fff', fontSize: 20, fontWeight: '700' },
   statCard: {
-    backgroundColor: '#fff', borderRadius: 14, padding: 16, marginBottom: 18,
-    borderWidth: 1, borderColor: '#E2E8F0', flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center',
+    backgroundColor: 'rgba(255,255,255,0.94)', borderRadius: 16, padding: 16, marginBottom: 18,
+    flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center',
+    shadowColor: '#0F172A', shadowOpacity: 0.06, shadowRadius: 12, shadowOffset: { width: 0, height: 4 }, elevation: 2,
   },
   statLabel: { fontSize: 13, color: '#64748B', fontWeight: '600' },
   statValue: { fontSize: 20, fontWeight: '800', color: '#0F172A' },
   sectionHeaderRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 10 },
   sectionTitle: { fontSize: 16, fontWeight: '700', color: '#0F172A' },
   seeAll: { color: '#16A34A', fontWeight: '700', fontSize: 13 },
-  empty: { fontSize: 14, color: '#94A3B8', textAlign: 'center', marginTop: 20 },
+  empty: { fontSize: 14, color: '#475569', fontWeight: '500', textAlign: 'center', marginTop: 20 },
   card: {
-    backgroundColor: '#fff', borderRadius: 14, padding: 16, marginBottom: 12,
-    borderWidth: 1, borderColor: '#E2E8F0',
+    backgroundColor: 'rgba(255,255,255,0.94)', borderRadius: 16, padding: 16, marginBottom: 12,
+    shadowColor: '#0F172A', shadowOpacity: 0.06, shadowRadius: 12, shadowOffset: { width: 0, height: 4 }, elevation: 2,
   },
+  // A long category ("Data / Network / Home Automation Specialist") and the
+  // status badge used to just sit in one unwrapped row with neither side
+  // able to give way — the badge got pushed clean off the card's right
+  // edge and clipped by the screen instead of wrapping or shrinking.
+  // cardCategory now takes the flexible remaining space and truncates with
+  // an ellipsis; the badge keeps its natural size so it's always fully
+  // visible. Same fix applied on MyJobsScreen's identical card markup.
   cardTop: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 6 },
-  cardCategory: { fontSize: 16, fontWeight: '700' },
-  badge: { paddingHorizontal: 8, paddingVertical: 4, borderRadius: 8 },
+  cardCategory: { fontSize: 16, fontWeight: '700', flex: 1, marginRight: 8 },
+  badge: { paddingHorizontal: 8, paddingVertical: 4, borderRadius: 8, flexShrink: 0 },
   badgeText: { fontSize: 12, fontWeight: '700' },
   cardDescription: { fontSize: 14, color: '#475569', marginBottom: 6 },
   cardLocation: { fontSize: 13, color: '#94A3B8' },

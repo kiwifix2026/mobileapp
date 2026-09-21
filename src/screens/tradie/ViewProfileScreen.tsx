@@ -9,6 +9,7 @@ import { getTradieByEmail } from '../../api/tradies';
 import { getSignedUrl } from '../../api/uploads';
 import { useAuth } from '../../auth/AuthContext';
 import { ApiError } from '../../api/client';
+import ScreenBackground from '../../components/ScreenBackground';
 
 type Props = NativeStackScreenProps<TradieStackParamList, 'ViewProfile'>;
 
@@ -45,6 +46,7 @@ export default function ViewProfileScreen({}: Props) {
 
   if (isError) {
     return (
+      <ScreenBackground>
       <SafeAreaView style={styles.safe}>
         <View style={styles.errorState}>
           <Text style={styles.errorStateText}>
@@ -56,13 +58,16 @@ export default function ViewProfileScreen({}: Props) {
           </Pressable>
         </View>
       </SafeAreaView>
+      </ScreenBackground>
     );
   }
   if (isLoading || !tradie) {
     return (
+      <ScreenBackground>
       <SafeAreaView style={styles.safe}>
         <ActivityIndicator style={{ marginTop: 60 }} />
       </SafeAreaView>
+      </ScreenBackground>
     );
   }
 
@@ -73,6 +78,7 @@ export default function ViewProfileScreen({}: Props) {
   const isApproved = tradie.approvalStatus === 'APPROVED';
 
   return (
+    <ScreenBackground>
     <SafeAreaView style={styles.safe}>
       <ScrollView contentContainerStyle={[styles.container, { paddingBottom: tabBarHeight + 20 }]}>
         <View
@@ -154,11 +160,12 @@ export default function ViewProfileScreen({}: Props) {
         </Text>
       </ScrollView>
     </SafeAreaView>
+    </ScreenBackground>
   );
 }
 
 const styles = StyleSheet.create({
-  safe: { flex: 1, backgroundColor: '#F8FAFC' },
+  safe: { flex: 1 },
   container: { padding: 20, paddingBottom: 40 },
   banner: { borderRadius: 12, borderWidth: 1, padding: 12, marginBottom: 16 },
   bannerApproved: { backgroundColor: '#F0FDF4', borderColor: '#BBF7D0' },
@@ -182,8 +189,8 @@ const styles = StyleSheet.create({
   name: { fontSize: 20, fontWeight: '800', color: '#0F172A', textAlign: 'center' },
   sub: { fontSize: 13, color: '#64748B', marginTop: 2 },
   section: {
-    backgroundColor: '#fff', borderRadius: 14, borderWidth: 1, borderColor: '#E2E8F0',
-    padding: 16, marginBottom: 12,
+    backgroundColor: 'rgba(255,255,255,0.94)', borderRadius: 16, padding: 16, marginBottom: 12,
+    shadowColor: '#0F172A', shadowOpacity: 0.06, shadowRadius: 10, shadowOffset: { width: 0, height: 3 }, elevation: 2,
   },
   sectionLabel: { fontSize: 12, fontWeight: '700', color: '#94A3B8', textTransform: 'uppercase', marginBottom: 8 },
   value: { fontSize: 14, color: '#0F172A', fontWeight: '600', marginTop: 2 },
@@ -191,5 +198,5 @@ const styles = StyleSheet.create({
   chip: { backgroundColor: '#F0FDF4', borderRadius: 20, paddingHorizontal: 12, paddingVertical: 6 },
   chipText: { color: '#166534', fontWeight: '700', fontSize: 13 },
   emergencyBadge: { fontSize: 13, color: '#DC2626', fontWeight: '700', marginTop: 6 },
-  footnote: { fontSize: 12, color: '#94A3B8', textAlign: 'center', marginTop: 8, lineHeight: 17, paddingHorizontal: 10 },
+  footnote: { fontSize: 12, color: '#475569', fontWeight: '500', textAlign: 'center', marginTop: 8, lineHeight: 17, paddingHorizontal: 10 },
 });

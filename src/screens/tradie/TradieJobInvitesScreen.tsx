@@ -11,6 +11,7 @@ import { applyToJob } from '../../api/jobs';
 import { getSignedUrl } from '../../api/uploads';
 import { useAuth } from '../../auth/AuthContext';
 import { ApiError } from '../../api/client';
+import ScreenBackground from '../../components/ScreenBackground';
 
 type Props = NativeStackScreenProps<TradieStackParamList, 'TradieJobInvites'>;
 
@@ -151,6 +152,7 @@ export default function TradieJobInvitesScreen({ navigation }: Props) {
   });
 
   return (
+    <ScreenBackground>
     <SafeAreaView style={styles.safe}>
       <ScrollView
         contentContainerStyle={[styles.scroll, { paddingBottom: tabBarHeight + 20 }]}
@@ -173,16 +175,17 @@ export default function TradieJobInvitesScreen({ navigation }: Props) {
         )}
       </ScrollView>
     </SafeAreaView>
+    </ScreenBackground>
   );
 }
 
 const styles = StyleSheet.create({
-  safe: { flex: 1, backgroundColor: '#F8FAFC' },
+  safe: { flex: 1 },
   scroll: { padding: 20, paddingBottom: 40 },
-  empty: { fontSize: 14, color: '#94A3B8', textAlign: 'center', marginTop: 60, paddingHorizontal: 10, lineHeight: 20 },
+  empty: { fontSize: 14, color: '#475569', fontWeight: '500', textAlign: 'center', marginTop: 60, paddingHorizontal: 10, lineHeight: 20 },
   card: {
-    backgroundColor: '#fff', borderRadius: 14, padding: 16, marginBottom: 14,
-    borderWidth: 1, borderColor: '#E2E8F0',
+    backgroundColor: 'rgba(255,255,255,0.94)', borderRadius: 16, padding: 16, marginBottom: 14,
+    shadowColor: '#0F172A', shadowOpacity: 0.06, shadowRadius: 12, shadowOffset: { width: 0, height: 4 }, elevation: 2,
   },
   cardTop: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-start', gap: 8 },
   category: { fontSize: 17, fontWeight: '800', color: '#0F172A', flexShrink: 1 },

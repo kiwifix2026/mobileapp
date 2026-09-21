@@ -7,6 +7,7 @@ import { useQuery, useQueryClient } from '@tanstack/react-query';
 import type { TradieStackParamList } from '../../navigation/types';
 import { openTradieMessages } from '../../api/tradies';
 import { useAuth } from '../../auth/AuthContext';
+import ScreenBackground from '../../components/ScreenBackground';
 
 type Props = NativeStackScreenProps<TradieStackParamList, 'Notifications'>;
 
@@ -54,6 +55,7 @@ export default function NotificationsScreen({ navigation }: Props) {
   );
 
   return (
+    <ScreenBackground>
     <SafeAreaView style={styles.safe}>
       {isLoading ? (
         <ActivityIndicator style={{ marginTop: 40 }} />
@@ -83,18 +85,19 @@ export default function NotificationsScreen({ navigation }: Props) {
         />
       )}
     </SafeAreaView>
+    </ScreenBackground>
   );
 }
 
 const styles = StyleSheet.create({
-  safe: { flex: 1, backgroundColor: '#F8FAFC' },
+  safe: { flex: 1 },
   list: { padding: 16, paddingTop: 20 },
-  empty: { fontSize: 14, color: '#94A3B8', textAlign: 'center', marginTop: 60 },
+  empty: { fontSize: 14, color: '#475569', fontWeight: '500', textAlign: 'center', marginTop: 60 },
   card: {
-    backgroundColor: '#fff', borderRadius: 14, padding: 16, marginBottom: 10,
-    borderWidth: 1, borderColor: '#E2E8F0',
+    backgroundColor: 'rgba(255,255,255,0.94)', borderRadius: 16, padding: 16, marginBottom: 10,
+    shadowColor: '#0F172A', shadowOpacity: 0.06, shadowRadius: 12, shadowOffset: { width: 0, height: 4 }, elevation: 2,
   },
-  cardUnread: { backgroundColor: '#F0FDF4', borderColor: '#BBF7D0' },
+  cardUnread: { backgroundColor: 'rgba(240,253,244,0.96)' },
   body: { fontSize: 14, color: '#1E293B', lineHeight: 20 },
   time: { fontSize: 12, color: '#94A3B8', marginTop: 6 },
   jobLink: { fontSize: 13, color: '#2563EB', fontWeight: '700', marginTop: 8 },

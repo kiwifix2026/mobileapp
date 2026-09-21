@@ -1,5 +1,5 @@
 import React from 'react';
-import { Text } from 'react-native';
+import { Ionicons } from '@expo/vector-icons';
 import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
 import { createNativeStackNavigator } from '@react-navigation/native-stack';
 import { getFocusedRouteNameFromRoute } from '@react-navigation/native';
@@ -9,6 +9,7 @@ import HomeScreen from '../screens/poster/HomeScreen';
 import MyJobsScreen from '../screens/poster/MyJobsScreen';
 import PostJobScreen from '../screens/poster/PostJobScreen';
 import JobDetailScreen from '../screens/poster/JobDetailScreen';
+import EditJobScreen from '../screens/poster/EditJobScreen';
 import ProfileScreen from '../screens/poster/ProfileScreen';
 import ConversationsListScreen from '../screens/shared/ConversationsListScreen';
 import ChatThreadScreen from '../screens/shared/ChatThreadScreen';
@@ -29,6 +30,7 @@ function HomeStack() {
       <Stack.Screen name="Home" component={HomeScreen} options={{ headerShown: false }} />
       <Stack.Screen name="PostJob" component={PostJobScreen} options={{ title: 'Post a Job' }} />
       <Stack.Screen name="JobDetail" component={JobDetailScreen} options={{ title: 'Job Details' }} />
+      <Stack.Screen name="EditJob" component={EditJobScreen} options={{ headerShown: false }} />
       <Stack.Screen name="ChatThread" component={ChatThreadScreen} options={{ title: '' }} />
       {/* Home's "See all →" pushes the full list here too, rather than
           switching tabs — keeps that link a simple in-stack push. */}
@@ -42,6 +44,7 @@ function JobsStack() {
       <Stack.Screen name="MyJobs" component={MyJobsScreen} options={{ headerShown: false }} />
       <Stack.Screen name="PostJob" component={PostJobScreen} options={{ title: 'Post a Job' }} />
       <Stack.Screen name="JobDetail" component={JobDetailScreen} options={{ title: 'Job Details' }} />
+      <Stack.Screen name="EditJob" component={EditJobScreen} options={{ headerShown: false }} />
       <Stack.Screen name="ChatThread" component={ChatThreadScreen} options={{ title: '' }} />
     </Stack.Navigator>
   );
@@ -62,11 +65,15 @@ function ProfileStack() {
   );
 }
 
-const TAB_ICONS: Record<keyof PosterTabParamList, string> = {
-  HomeTab: '🏠',
-  JobsTab: '📋',
-  MessagesTab: '💬',
-  ProfileTab: '👤',
+// Line icons (outline when the tab isn't focused, filled when it is) —
+// replaces the old plain-emoji tab bar, which rendered as full-colour glyphs
+// that couldn't pick up the active/inactive tint and looked out of place
+// next to the app's flatter, greener visual language.
+const TAB_ICONS: Record<keyof PosterTabParamList, { active: keyof typeof Ionicons.glyphMap; inactive: keyof typeof Ionicons.glyphMap }> = {
+  HomeTab: { active: 'home', inactive: 'home-outline' },
+  JobsTab: { active: 'briefcase', inactive: 'briefcase-outline' },
+  MessagesTab: { active: 'chatbubble-ellipses', inactive: 'chatbubble-ellipses-outline' },
+  ProfileTab: { active: 'person', inactive: 'person-outline' },
 };
 const TAB_LABELS: Record<keyof PosterTabParamList, string> = {
   HomeTab: 'Home',
@@ -79,7 +86,7 @@ const TAB_LABELS: Record<keyof PosterTabParamList, string> = {
 // the tab bar also showing underneath it, the two fixed bottom bars stacked
 // and clipped the last bit of scrollable content. Hide the tab bar whenever
 // PostJob is the focused screen within a tab's nested stack.
-const FULL_SCREEN_ROUTES = new Set(['PostJob']);
+const FULL_SCREEN_ROUTES = new Set(['PostJob', 'EditJob']);
 
 export default function PosterNavigator() {
   const { session } = useAuth();
@@ -103,7 +110,10 @@ export default function PosterNavigator() {
           tabBarActiveTintColor: '#16A34A',
           tabBarInactiveTintColor: '#94A3B8',
           tabBarLabel: TAB_LABELS[route.name as keyof PosterTabParamList],
-          tabBarIcon: ({ color }) => <Text style={{ fontSize: 20, color }}>{TAB_ICONS[route.name as keyof PosterTabParamList]}</Text>,
+          tabBarIcon: ({ color, focused }) => {
+            const icons = TAB_ICONS[route.name as keyof PosterTabParamList];
+            return <Ionicons name={focused ? icons.active : icons.inactive} size={22} color={color} />;
+          },
           tabBarStyle: FULL_SCREEN_ROUTES.has(focusedRouteName) ? { display: 'none' } : undefined,
         };
       }}

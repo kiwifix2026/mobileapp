@@ -8,13 +8,14 @@ import { useQuery } from '@tanstack/react-query';
 import * as ImagePicker from 'expo-image-picker';
 import type { AuthStackParamList } from '../../navigation/types';
 import { getApprovedTrades, getAllTradeServices } from '../../api/trades';
-import { upsertTradie, Licence, TeamMember, TradieService } from '../../api/tradies';
+import { upsertTradie, Licence, TeamMember, TradieService, PortfolioItem } from '../../api/tradies';
 import { uploadPhoto } from '../../api/uploads';
 import { ApiError } from '../../api/client';
 import { useAuth } from '../../auth/AuthContext';
 import AddressAutocompleteField, { ConfirmedAddress } from '../../components/AddressAutocompleteField';
 import LicenceDateField from '../../components/LicenceDateField';
 import { NZ_REGIONS } from '../../data/nzRegions';
+import ScreenBackground from '../../components/ScreenBackground';
 
 type Props = NativeStackScreenProps<AuthStackParamList, 'TradieOnboarding'>;
 
@@ -34,9 +35,6 @@ type Props = NativeStackScreenProps<AuthStackParamList, 'TradieOnboarding'>;
 //  - Web's "jump back into one step from Review, then return to Review"
 //    shortcut (editingFromReview) isn't implemented — Back/Continue always
 //    move one step at a time.
-//  - Portfolio is a non-numbered "bonus step" on web (optional, outside
-//    the 7-step stepper) — omitted here for the same reason web treats it
-//    as skippable/lower-priority.
 //
 // 2026-08-25: added web's team-licence attribution, ported from app.js's
 // renderLicenceSections()/useTeamLicensing — when businessType !== 'Sole
@@ -47,10 +45,25 @@ type Props = NativeStackScreenProps<AuthStackParamList, 'TradieOnboarding'>;
 // Also gated the "Do you have a team?" question to only show for Company/
 // Partnership, matching web's onBusinessTypeChange() hiding it (and
 // resetting hasTeam) for Sole Trader.
+//
+// 2026-08-29: added a Portfolio step (bio + work photos, backed by
+// PortfolioItemDto) and a live "Profile strength" percentage in the header,
+// after a user report that both were missing here vs. web's index.html
+// (which shows a weighted Profile Strength bar — see app.js's profileDone/
+// STEP_WEIGHT/computeStepDoneFlag/getProfilePct — and a Portfolio card on
+// Review & Submit). Portfolio is a real numbered step here (unlike web,
+// where it's a non-numbered "bonus" page reachable only via Review's Edit
+// link) — mobile's stepper has no non-numbered side-door, so folding it
+// into the main flow (fully skippable, same as Licence) is the more honest
+// fit rather than hiding it somewhere unreachable. computeStepDone() below
+// mirrors web's computeStepDoneFlag() per step, using the SAME weights
+// (account:10/services:15/personal:15/business:15/licence:20/areas:10/
+// availability:5/portfolio:10 = 100), with 'account' counted as always-done
+// since email+OTP already happened before this screen exists.
 
 type UploadSlot = { uri: string; key?: string; uploading: boolean } | null;
 
-const STEP_IDS = ['services', 'personal', 'business', 'licence', 'areas', 'availability', 'review'] as const;
+const STEP_IDS = ['services', 'personal', 'business', 'licence', 'areas', 'availability', 'portfolio', 'review'] as const;
 type StepId = typeof STEP_IDS[number];
 const STEP_LABELS: Record<StepId, string> = {
   services: 'Services',
@@ -59,7 +72,16 @@ const STEP_LABELS: Record<StepId, string> = {
   licence: 'Licence',
   areas: 'Areas',
   availability: 'Availability',
+  portfolio: 'Portfolio',
   review: 'Review & Submit',
+};
+
+// Mirrors app.js's STEP_WEIGHT exactly, plus 'account' — the email+OTP step
+// that already happened before this screen ever renders, so it always
+// contributes its 10 points (matching web's "always true once they reach
+// profile steps").
+const STEP_WEIGHT: Record<'account' | StepId, number> = {
+  account: 10, services: 15, personal: 15, business: 15, licence: 20, areas: 10, availability: 5, portfolio: 10, review: 0,
 };
 
 const BUSINESS_TYPES = ['Sole Trader', 'Company', 'Partnership'];
@@ -161,9 +183,14 @@ export default function TradieOnboardingScreen({ route }: Props) {
   const [driverLicencePhoto, setDriverLicencePhoto] = useState<UploadSlot>(null);
   const [driverLicenceError, setDriverLicenceError] = useState<string | null>(null);
 
+  // NZ mobile numbers (021/022/027 etc.) are 10 digits including the
+  // leading 0 — matches web's formatMobile() cap (app.js: val.slice(0, 10))
+  // and the "+64" country-code pill shown next to the field there. The
+  // field itself still stores the local 0-prefixed form (e.g. 0224220413);
+  // +64 is decorative only, same as web, not concatenated into the value.
   const mobileDigits = mobile.replace(/\D/g, '');
   const mobileError =
-    mobile.trim().length > 0 && (mobileDigits.length < 8 || mobileDigits.length > 11) ? 'Enter a valid mobile number.' : null;
+    mobile.trim().length > 0 && (mobileDigits.length < 8 || mobileDigits.length > 10) ? 'Enter a valid mobile number.' : null;
 
   async function pickAndUpload(
     onStart: (uri: string) => void,
@@ -212,6 +239,13 @@ export default function TradieOnboardingScreen({ route }: Props) {
   const [teamMembers, setTeamMembers] = useState<TeamMember[]>([]);
 
   const nzbnError = nzbn.trim().length > 0 && !isValidNZBN(nzbn) ? 'Enter a valid 13-digit NZBN.' : null;
+  const hasValidNzbn = nzbn.trim().length > 0 && !nzbnError;
+  // Companies verify via NZBN only. Sole traders/partnerships have no NZBN
+  // by default, so we fall back to requiring a driver's licence upload for
+  // them — unless they DO have an NZBN (some sole traders register one),
+  // in which case that alone is enough and the licence becomes optional.
+  const isCompany = businessType === 'Company';
+  const needsDriverLicence = !isCompany && !hasValidNzbn;
 
   // Matches web's onBusinessTypeChange(): the team question only makes
   // sense for Company/Partnership, and switching to Sole Trader clears
@@ -334,6 +368,72 @@ export default function TradieOnboardingScreen({ route }: Props) {
     setActiveDays((prev) => (prev.includes(day) ? prev.filter((d) => d !== day) : [...prev, day]));
   }
 
+  // --- Portfolio ---
+  const [bio, setBio] = useState('');
+  const [portfolioItems, setPortfolioItems] = useState<{ uri: string; key: string; caption: string }[]>([]);
+  const [portfolioUploading, setPortfolioUploading] = useState(false);
+  const [portfolioError, setPortfolioError] = useState<string | null>(null);
+
+  function pickPortfolioPhoto() {
+    setPortfolioError(null);
+    pickAndUpload(
+      () => setPortfolioUploading(true),
+      (key, uri) => {
+        setPortfolioUploading(false);
+        setPortfolioItems((prev) => [...prev, { uri, key, caption: '' }]);
+      },
+      (msg) => { setPortfolioUploading(false); setPortfolioError(msg); },
+    );
+  }
+  function updatePortfolioCaption(index: number, caption: string) {
+    setPortfolioItems((prev) => prev.map((p, i) => (i === index ? { ...p, caption } : p)));
+  }
+  function removePortfolioItem(index: number) {
+    setPortfolioItems((prev) => prev.filter((_, i) => i !== index));
+  }
+
+  // Mirrors app.js's computeStepDoneFlag() per step — "is this step actually
+  // complete", based on real data, not just whether the tradie clicked
+  // through it. Feeds the live "Profile strength" percentage in the header.
+  function computeStepDone(id: StepId): boolean {
+    switch (id) {
+      case 'services': return allTrades.length > 0;
+      case 'personal': return !!(firstName.trim() && mobile.trim() && address && photo?.key);
+      case 'business':
+        if (!businessName.trim() || !businessType) return false;
+        if (isCompany) return hasValidNzbn;
+        return hasValidNzbn || !!driverLicencePhoto?.key;
+      case 'licence': {
+        const requiredSections = licenceSections.filter((s) => licenceTierFor(s.trade) === 'required');
+        if (!requiredSections.length) return true; // nothing legally required right now — step stays optional
+        return requiredSections.every((s) => {
+          const l = licenceByKey[s.key];
+          const doc = licenceDocs[s.key];
+          return !!(l?.number && l?.expiry && doc?.key);
+        });
+      }
+      case 'areas': return selectedServiceAreas.length > 0;
+      case 'availability': return activeDays.length > 0;
+      // A bio OR at least one photo counts as genuinely started — same
+      // threshold web's rvPortfolioSummary card on Review & Submit uses.
+      case 'portfolio': return portfolioItems.length > 0 || bio.trim().length > 0;
+      default: return true;
+    }
+  }
+
+  const profilePct = useMemo(() => {
+    let sum = STEP_WEIGHT.account; // always true — email/OTP already happened before this screen
+    (['services', 'personal', 'business', 'licence', 'areas', 'availability', 'portfolio'] as StepId[]).forEach((id) => {
+      if (computeStepDone(id)) sum += STEP_WEIGHT[id];
+    });
+    return sum;
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [
+    allTrades, firstName, mobile, address, photo, businessName, businessType,
+    nzbn, driverLicencePhoto, licenceSections, licenceByKey, licenceDocs,
+    selectedServiceAreas, activeDays, portfolioItems, bio,
+  ]);
+
   // --- Per-step validation, mirroring app.js's validateStep() ---
   function validateCurrentStep(): string | null {
     if (stepId === 'services') {
@@ -350,6 +450,10 @@ export default function TradieOnboardingScreen({ route }: Props) {
     if (stepId === 'business') {
       if (!businessName.trim()) return 'Business name is required.';
       if (nzbnError) return nzbnError;
+      if (isCompany && !hasValidNzbn) return 'NZBN is required for a company.';
+      if (needsDriverLicence && !driverLicencePhoto?.key) {
+        return 'Provide an NZBN or upload a driver\'s licence.';
+      }
       return null;
     }
     if (stepId === 'licence') {
@@ -369,7 +473,7 @@ export default function TradieOnboardingScreen({ route }: Props) {
       if (activeDays.length === 0) return 'Select at least one working day.';
       return null;
     }
-    return null; // areas: soft/optional, same as web
+    return null; // areas/portfolio: soft/optional, same as web
   }
 
   function goNext() {
@@ -409,6 +513,7 @@ export default function TradieOnboardingScreen({ route }: Props) {
         names.map((name) => ({ trade, name, custom: false })),
       );
       const customTrades: TradieService[] = customTradeNames.map((name) => ({ name, custom: true }));
+      const portfolioPayload: PortfolioItem[] = portfolioItems.map((p) => ({ photoUrl: p.key, caption: p.caption.trim() || undefined }));
 
       const result = await upsertTradie({
         email,
@@ -435,6 +540,8 @@ export default function TradieOnboardingScreen({ route }: Props) {
         startTime,
         endTime,
         acceptsEmergency,
+        bio: bio.trim() || undefined,
+        portfolioItems: portfolioPayload.length ? portfolioPayload : undefined,
       });
       await signIn({ role: 'tradie', token: result.accessToken, email: result.email });
       // No explicit navigation needed — RootNavigator swaps to TradieNavigator
@@ -447,10 +554,18 @@ export default function TradieOnboardingScreen({ route }: Props) {
   }
 
   return (
+    <ScreenBackground>
     <SafeAreaView style={styles.safe}>
       <View style={styles.stepperHeader}>
         <Text style={styles.stepperCount}>Step {step + 1} of {STEP_IDS.length}</Text>
         <Text style={styles.stepperLabel}>{STEP_LABELS[stepId]}</Text>
+        <View style={styles.pctRow}>
+          <Text style={styles.pctLabel}>Profile strength</Text>
+          <Text style={styles.pctValue}>{profilePct}%</Text>
+        </View>
+        <View style={styles.pctBarTrack}>
+          <View style={[styles.pctBarFill, { width: `${profilePct}%` }]} />
+        </View>
         <View style={styles.stepperDots}>
           {STEP_IDS.map((id, i) => (
             <View key={id} style={[styles.stepDot, i <= step && styles.stepDotActive]} />
@@ -469,7 +584,10 @@ export default function TradieOnboardingScreen({ route }: Props) {
               <Text style={styles.title}>What trade(s) do you do?</Text>
               <Text style={styles.subtitle}>Select every trade you want to be matched on.</Text>
 
-              <TextInput style={styles.input} placeholder="Search trades…" value={tradeQuery} onChangeText={setTradeQuery} />
+              <View style={styles.inputIconWrap}>
+                <Text style={styles.inputIcon}>🔍</Text>
+                <TextInput style={[styles.input, styles.inputWithIcon]} placeholder="Search trades…" value={tradeQuery} onChangeText={setTradeQuery} />
+              </View>
               {selectedTrades.length > 0 && (
                 <View style={styles.selectedRow}>
                   {selectedTrades.map((name) => (
@@ -517,12 +635,15 @@ export default function TradieOnboardingScreen({ route }: Props) {
 
               <Text style={styles.label}>Don't see your trade?</Text>
               <View style={styles.row}>
-                <TextInput
-                  style={[styles.input, { flex: 1 }]}
-                  placeholder="Type a custom trade name"
-                  value={customTradeInput}
-                  onChangeText={setCustomTradeInput}
-                />
+                <View style={[styles.inputIconWrap, { flex: 1 }]}>
+                  <Text style={styles.inputIcon}>🍃</Text>
+                  <TextInput
+                    style={[styles.input, styles.inputWithIcon]}
+                    placeholder="Type a custom trade name"
+                    value={customTradeInput}
+                    onChangeText={setCustomTradeInput}
+                  />
+                </View>
                 <Pressable style={styles.addBtn} onPress={addCustomTrade}>
                   <Text style={styles.addBtnText}>+ Add</Text>
                 </Pressable>
@@ -565,14 +686,14 @@ export default function TradieOnboardingScreen({ route }: Props) {
               <Text style={styles.title}>Your details</Text>
               <Text style={styles.subtitle}>This is what job posters and admin will see.</Text>
 
-              <Pressable style={styles.photoPicker} onPress={pickProfilePhoto}>
+              <Pressable style={styles.avatarPicker} onPress={pickProfilePhoto}>
                 {photo ? (
-                  <View style={styles.photoThumbWrap}>
-                    <Image source={{ uri: photo.uri }} style={styles.photoThumb} />
+                  <View style={styles.avatarThumbWrap}>
+                    <Image source={{ uri: photo.uri }} style={styles.avatarThumb} />
                     {photo.uploading && <View style={styles.photoOverlay}><ActivityIndicator color="#fff" /></View>}
                   </View>
                 ) : (
-                  <Text style={styles.photoPickerText}>📷 Add a profile photo (required)</Text>
+                  <Text style={styles.avatarPickerText}>📷{'\n'}Add photo{'\n'}(required)</Text>
                 )}
               </Pressable>
               {photoError && <Text style={styles.error}>⚠️ {photoError}</Text>}
@@ -581,14 +702,17 @@ export default function TradieOnboardingScreen({ route }: Props) {
                 <TextInput style={[styles.input, styles.half]} placeholder="First name" value={firstName} onChangeText={setFirstName} />
                 <TextInput style={[styles.input, styles.half]} placeholder="Last name" value={lastName} onChangeText={setLastName} />
               </View>
-              <TextInput
-                style={styles.input}
-                placeholder="Mobile number"
-                keyboardType="phone-pad"
-                maxLength={16}
-                value={mobile}
-                onChangeText={(t) => setMobile(t.replace(/[^\d+ ]/g, ''))}
-              />
+              <View style={styles.inputIconWrap}>
+                <Text style={styles.phonePrefix}>+64</Text>
+                <TextInput
+                  style={[styles.input, styles.inputWithPrefix]}
+                  placeholder="021 234 5678"
+                  keyboardType="phone-pad"
+                  maxLength={10}
+                  value={mobile}
+                  onChangeText={(t) => setMobile(t.replace(/\D/g, '').slice(0, 10))}
+                />
+              </View>
               {mobileError && <Text style={styles.error}>⚠️ {mobileError}</Text>}
 
               {/* AddressAutocompleteField renders its own "Home address"
@@ -597,18 +721,6 @@ export default function TradieOnboardingScreen({ route }: Props) {
               <View style={{ marginTop: 14 }}>
                 <AddressAutocompleteField label="Home address" value={address} onChange={setAddress} />
               </View>
-
-              <Pressable style={styles.photoPickerSmall} onPress={pickDriverLicence}>
-                {driverLicencePhoto ? (
-                  <View style={styles.photoThumbWrap}>
-                    <Image source={{ uri: driverLicencePhoto.uri }} style={styles.photoThumb} />
-                    {driverLicencePhoto.uploading && <View style={styles.photoOverlay}><ActivityIndicator color="#fff" /></View>}
-                  </View>
-                ) : (
-                  <Text style={styles.photoPickerText}>🪪 Driver's licence (optional)</Text>
-                )}
-              </Pressable>
-              {driverLicenceError && <Text style={styles.error}>⚠️ {driverLicenceError}</Text>}
             </View>
           )}
 
@@ -626,15 +738,45 @@ export default function TradieOnboardingScreen({ route }: Props) {
                 ))}
               </View>
 
+              {/* Which of NZBN vs driver's licence is required depends on
+                  business type — see the banner + inline placeholders below.
+                  Companies verify via NZBN only; sole traders/partnerships
+                  need one or the other. isCompany/needsDriverLicence drive
+                  both the field requirements and validateCurrentStep(). */}
+              <View style={styles.infoBanner}>
+                <Text style={styles.infoBannerText}>
+                  🪪 To verify your business we need either an NZBN or a driver's licence number.
+                  {isCompany ? ' Companies must provide an NZBN.' : " Sole traders/partnerships need one or the other — an NZBN if you have one, otherwise a driver's licence."}
+                </Text>
+              </View>
+
               <TextInput
                 style={styles.input}
-                placeholder="NZBN (optional)"
+                placeholder={isCompany ? 'NZBN' : 'NZBN (optional if you upload a driver\'s licence)'}
                 keyboardType="number-pad"
                 maxLength={13}
                 value={nzbn}
                 onChangeText={(t) => setNzbn(t.replace(/\D/g, ''))}
               />
               {nzbnError && <Text style={styles.error}>⚠️ {nzbnError}</Text>}
+
+              {!isCompany && (
+                <View>
+                  <Pressable style={styles.photoPickerSmall} onPress={pickDriverLicence}>
+                    {driverLicencePhoto ? (
+                      <View style={styles.photoThumbWrap}>
+                        <Image source={{ uri: driverLicencePhoto.uri }} style={styles.photoThumb} />
+                        {driverLicencePhoto.uploading && <View style={styles.photoOverlay}><ActivityIndicator color="#fff" /></View>}
+                      </View>
+                    ) : (
+                      <Text style={styles.photoPickerText}>
+                        🪪 Driver's licence{hasValidNzbn ? ' (optional — NZBN provided)' : ' (required if no NZBN)'}
+                      </Text>
+                    )}
+                  </Pressable>
+                  {driverLicenceError && <Text style={styles.error}>⚠️ {driverLicenceError}</Text>}
+                </View>
+              )}
 
               {businessType !== 'Sole Trader' && (
                 <View>
@@ -774,6 +916,34 @@ export default function TradieOnboardingScreen({ route }: Props) {
                 ))}
               </View>
 
+              {/* Pinned right under the region row, above the district/
+                  suburb browser below — this used to render at the very
+                  bottom of the step instead, so switching from browsing
+                  Auckland to browsing Waikato pushed this confirmation list
+                  further down (or off) the screen at the same moment the
+                  Auckland suburb tiles disappeared from view. Nothing was
+                  ever actually deselected — selectedServiceAreas always
+                  accumulates across every region (toggleArea only ever
+                  adds/removes the one exact region+district+area it's
+                  called with) — but with the only visible proof of "still
+                  selected" scrolled out of sight right as you switch
+                  regions, it looked exactly like picking a new region wiped
+                  the old one. Keeping this always-visible instead fixes the
+                  appearance without changing the underlying (already
+                  correct) selection logic. */}
+              {selectedServiceAreas.length > 0 && (
+                <View>
+                  <Text style={styles.label}>Selected areas</Text>
+                  <View style={styles.selectedRow}>
+                    {selectedServiceAreas.map((a, i) => (
+                      <Pressable key={i} style={styles.selectedChip} onPress={() => toggleArea(a.region, a.district, a.area)}>
+                        <Text style={styles.selectedChipText}>{a.region} · {a.area} ✕</Text>
+                      </Pressable>
+                    ))}
+                  </View>
+                </View>
+              )}
+
               {activeRegion && (
                 <View style={styles.serviceBlock}>
                   <Text style={styles.serviceBlockTitle}>{activeRegion} — district</Text>
@@ -814,19 +984,6 @@ export default function TradieOnboardingScreen({ route }: Props) {
                         </Pressable>
                       );
                     })}
-                  </View>
-                </View>
-              )}
-
-              {selectedServiceAreas.length > 0 && (
-                <View>
-                  <Text style={styles.label}>Selected areas</Text>
-                  <View style={styles.selectedRow}>
-                    {selectedServiceAreas.map((a, i) => (
-                      <Pressable key={i} style={styles.selectedChip} onPress={() => toggleArea(a.region, a.district, a.area)}>
-                        <Text style={styles.selectedChipText}>{a.area} ✕</Text>
-                      </Pressable>
-                    ))}
                   </View>
                 </View>
               )}
@@ -879,6 +1036,51 @@ export default function TradieOnboardingScreen({ route }: Props) {
             </View>
           )}
 
+          {stepId === 'portfolio' && (
+            <View>
+              <Text style={styles.title}>Portfolio</Text>
+              <Text style={styles.subtitle}>Totally optional, but a bio and a few work photos help you stand out to job posters.</Text>
+
+              <Text style={styles.label}>About you</Text>
+              <TextInput
+                style={[styles.input, styles.textArea]}
+                placeholder="A short blurb job posters will see on your profile"
+                value={bio}
+                onChangeText={setBio}
+                multiline
+              />
+
+              <Text style={styles.label}>Work photos</Text>
+              {portfolioItems.length === 0 ? (
+                <Text style={styles.hint}>No photos added yet — totally optional, but jobs with photos tend to get more interest.</Text>
+              ) : (
+                portfolioItems.map((item, i) => (
+                  <View key={i} style={styles.portfolioItemRow}>
+                    <Image source={{ uri: item.uri }} style={styles.portfolioThumb} />
+                    <TextInput
+                      style={[styles.input, styles.portfolioCaptionInput]}
+                      placeholder="Caption (optional) — e.g. Kitchen tap replacement, Mt Eden"
+                      value={item.caption}
+                      onChangeText={(t) => updatePortfolioCaption(i, t)}
+                      maxLength={200}
+                    />
+                    <Pressable onPress={() => removePortfolioItem(i)}>
+                      <Text style={styles.removeLink}>Remove</Text>
+                    </Pressable>
+                  </View>
+                ))
+              )}
+              <Pressable style={styles.photoPickerSmall} onPress={pickPortfolioPhoto}>
+                {portfolioUploading ? (
+                  <ActivityIndicator />
+                ) : (
+                  <Text style={styles.photoPickerText}>+ Add a work photo</Text>
+                )}
+              </Pressable>
+              {portfolioError && <Text style={styles.error}>⚠️ {portfolioError}</Text>}
+            </View>
+          )}
+
           {stepId === 'review' && (
             <View>
               <Text style={styles.title}>Review & submit</Text>
@@ -917,6 +1119,19 @@ export default function TradieOnboardingScreen({ route }: Props) {
                 <Text style={styles.reviewValue}>{activeDays.join(', ')} · {startTime} – {endTime}</Text>
                 <Text style={styles.reviewValue}>Emergency call-outs: {acceptsEmergency ? 'Yes' : 'No'}</Text>
               </View>
+              <View style={styles.reviewCard}>
+                <Text style={styles.reviewLabel}>Portfolio</Text>
+                {portfolioItems.length === 0 && !bio.trim() ? (
+                  <Text style={styles.reviewValueWarn}>⚠️ Not added yet — add a photo or bio to reach 100%</Text>
+                ) : (
+                  <>
+                    {!!bio.trim() && <Text style={styles.reviewValue}>✓ About me added</Text>}
+                    {portfolioItems.length > 0 && (
+                      <Text style={styles.reviewValue}>{portfolioItems.length} work photo{portfolioItems.length === 1 ? '' : 's'}</Text>
+                    )}
+                  </>
+                )}
+              </View>
 
               {submitError && <Text style={styles.error}>⚠️ {submitError}</Text>}
             </View>
@@ -932,7 +1147,7 @@ export default function TradieOnboardingScreen({ route }: Props) {
                 <Text style={styles.backBtnText}>← Back</Text>
               </Pressable>
             )}
-            {stepId === 'licence' && (
+            {(stepId === 'licence' || stepId === 'portfolio') && (
               <Pressable style={styles.skipBtn} onPress={skipStep}>
                 <Text style={styles.skipBtnText}>Skip →</Text>
               </Pressable>
@@ -950,14 +1165,20 @@ export default function TradieOnboardingScreen({ route }: Props) {
         </View>
       </KeyboardAvoidingView>
     </SafeAreaView>
+    </ScreenBackground>
   );
 }
 
 const styles = StyleSheet.create({
-  safe: { flex: 1, backgroundColor: '#fff' },
-  stepperHeader: { paddingHorizontal: 24, paddingTop: 12, paddingBottom: 10, borderBottomWidth: 1, borderBottomColor: '#F1F5F9' },
-  stepperCount: { fontSize: 12, color: '#94A3B8', fontWeight: '600' },
+  safe: { flex: 1 },
+  stepperHeader: { paddingHorizontal: 24, paddingTop: 12, paddingBottom: 10, backgroundColor: 'rgba(255,255,255,0.97)', borderBottomWidth: 1, borderBottomColor: '#F1F5F9' },
+  stepperCount: { fontSize: 12, color: '#475569', fontWeight: '600' },
   stepperLabel: { fontSize: 18, fontWeight: '800', color: '#0F172A', marginTop: 2 },
+  pctRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginTop: 10 },
+  pctLabel: { fontSize: 12, color: '#475569', fontWeight: '600' },
+  pctValue: { fontSize: 12, color: '#16A34A', fontWeight: '800' },
+  pctBarTrack: { height: 6, borderRadius: 3, backgroundColor: '#E2E8F0', marginTop: 4, overflow: 'hidden' },
+  pctBarFill: { height: 6, borderRadius: 3, backgroundColor: '#16A34A' },
   stepperDots: { flexDirection: 'row', gap: 6, marginTop: 8 },
   stepDot: { flex: 1, height: 4, borderRadius: 2, backgroundColor: '#E2E8F0' },
   stepDotActive: { backgroundColor: '#16A34A' },
@@ -966,16 +1187,39 @@ const styles = StyleSheet.create({
   footer: { padding: 16, paddingBottom: 24, borderTopWidth: 1, borderTopColor: '#E2E8F0', backgroundColor: '#fff' },
   footerRow: { flexDirection: 'row', gap: 10, alignItems: 'center' },
   title: { fontSize: 22, fontWeight: '800' },
-  subtitle: { fontSize: 14, color: '#64748B', marginBottom: 8 },
+  subtitle: { fontSize: 14, color: '#475569', fontWeight: '500', marginBottom: 8 },
   row: { flexDirection: 'row', gap: 10 },
   half: { flex: 1 },
-  input: { borderWidth: 1, borderColor: '#E2E8F0', borderRadius: 12, paddingHorizontal: 14, paddingVertical: 12, fontSize: 15 },
+  input: { borderWidth: 1, borderColor: '#E2E8F0', borderRadius: 12, backgroundColor: 'rgba(255,255,255,0.95)', paddingHorizontal: 14, paddingVertical: 12, fontSize: 15 },
+  textArea: { minHeight: 80, textAlignVertical: 'top' },
   label: { fontSize: 14, fontWeight: '700', color: '#334155', marginTop: 14, marginBottom: 2 },
-  hint: { fontSize: 12, color: '#94A3B8', marginTop: 6, lineHeight: 17 },
+  hint: { fontSize: 12, color: '#475569', fontWeight: '500', marginTop: 6, lineHeight: 17 },
   error: { color: '#DC2626', fontSize: 13 },
-  photoPicker: { borderWidth: 1, borderColor: '#E2E8F0', borderStyle: 'dashed', borderRadius: 12, paddingVertical: 16, alignItems: 'center', justifyContent: 'center', marginTop: 4 },
-  photoPickerSmall: { borderWidth: 1, borderColor: '#E2E8F0', borderStyle: 'dashed', borderRadius: 12, paddingVertical: 14, alignItems: 'center', justifyContent: 'center', marginTop: 10 },
+  photoPicker: { borderWidth: 1, borderColor: '#E2E8F0', borderStyle: 'dashed', backgroundColor: 'rgba(255,255,255,0.85)', borderRadius: 12, paddingVertical: 16, alignItems: 'center', justifyContent: 'center', marginTop: 4 },
+  // Dedicated compact circular avatar picker for the profile photo — see
+  // EditProfileScreen.tsx's identical addition for why: the generic
+  // photoPicker card (sized for wide licence/driver's-licence upload boxes)
+  // made the small profile photo sit tiny in the middle of a huge mostly-
+  // empty dashed rectangle.
+  avatarPicker: {
+    width: 96, height: 96, borderRadius: 48, alignSelf: 'center', overflow: 'hidden',
+    borderWidth: 1, borderColor: '#E2E8F0', borderStyle: 'dashed', backgroundColor: 'rgba(255,255,255,0.85)',
+    alignItems: 'center', justifyContent: 'center', marginTop: 4,
+  },
+  avatarPickerText: { color: '#64748B', fontSize: 11, textAlign: 'center', lineHeight: 15 },
+  avatarThumbWrap: { width: 96, height: 96, borderRadius: 48, overflow: 'hidden' },
+  avatarThumb: { width: '100%', height: '100%' },
+  photoPickerSmall: { borderWidth: 1, borderColor: '#E2E8F0', borderStyle: 'dashed', backgroundColor: 'rgba(255,255,255,0.85)', borderRadius: 12, paddingVertical: 14, alignItems: 'center', justifyContent: 'center', marginTop: 10 },
   photoPickerText: { color: '#64748B', fontSize: 14 },
+  // NZBN-or-driver's-licence explainer banner on the business step — same
+  // light-amber "heads up" treatment as the pending-approval banner
+  // elsewhere in the app (BrowseJobsScreen's pendingBanner), reused here
+  // since this is also a "you need to do one of two things" notice.
+  infoBanner: {
+    backgroundColor: '#FFFBEB', borderWidth: 1, borderColor: '#FDE68A', borderRadius: 12,
+    padding: 12, marginTop: 12, marginBottom: 4,
+  },
+  infoBannerText: { color: '#92400E', fontSize: 13, lineHeight: 18, fontWeight: '600' },
   photoThumbWrap: { width: 64, height: 64, borderRadius: 12, overflow: 'hidden' },
   photoThumb: { width: '100%', height: '100%' },
   photoOverlay: { position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, backgroundColor: 'rgba(0,0,0,0.4)', alignItems: 'center', justifyContent: 'center' },
@@ -983,26 +1227,51 @@ const styles = StyleSheet.create({
   selectedChip: { backgroundColor: '#DCFCE7', borderRadius: 20, paddingHorizontal: 12, paddingVertical: 6 },
   selectedChipText: { color: '#166534', fontWeight: '600', fontSize: 13 },
   tradeGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: 8, marginTop: 10 },
-  tradeChip: { flexDirection: 'row', alignItems: 'center', gap: 6, borderWidth: 1, borderColor: '#E2E8F0', borderRadius: 20, paddingHorizontal: 12, paddingVertical: 8 },
+  tradeChip: {
+    flexDirection: 'row', alignItems: 'center', gap: 6,
+    borderWidth: 1, borderColor: '#E2E8F0', backgroundColor: 'rgba(255,255,255,0.9)',
+    borderRadius: 20, paddingHorizontal: 12, paddingVertical: 8,
+  },
   tradeChipActive: { backgroundColor: '#16A34A', borderColor: '#16A34A' },
   tradeChipIcon: { fontSize: 16 },
   tradeChipText: { fontSize: 13, fontWeight: '600', color: '#334155' },
   tradeChipTextActive: { color: '#fff' },
-  serviceChip: { borderWidth: 1, borderColor: '#E2E8F0', borderRadius: 20, paddingHorizontal: 12, paddingVertical: 8 },
-  segmentChip: { borderWidth: 1, borderColor: '#E2E8F0', borderRadius: 20, paddingHorizontal: 14, paddingVertical: 8 },
+  serviceChip: {
+    borderWidth: 1, borderColor: '#E2E8F0', backgroundColor: 'rgba(255,255,255,0.9)',
+    borderRadius: 20, paddingHorizontal: 12, paddingVertical: 8,
+  },
+  segmentChip: {
+    borderWidth: 1, borderColor: '#E2E8F0', backgroundColor: 'rgba(255,255,255,0.9)',
+    borderRadius: 20, paddingHorizontal: 14, paddingVertical: 8,
+  },
   moreLink: { color: '#2563EB', fontWeight: '600', fontSize: 13, marginTop: 10 },
   removeLink: { color: '#DC2626', fontWeight: '600', fontSize: 13, marginTop: 8 },
-  addBtn: { backgroundColor: '#F1F5F9', borderRadius: 12, paddingHorizontal: 16, justifyContent: 'center' },
-  addBtnText: { color: '#334155', fontWeight: '700', fontSize: 14 },
-  serviceBlock: { marginTop: 16, borderTopWidth: 1, borderTopColor: '#F1F5F9', paddingTop: 12 },
+  addBtn: { backgroundColor: '#16A34A', borderRadius: 12, paddingHorizontal: 18, justifyContent: 'center' },
+  addBtnText: { color: '#fff', fontWeight: '700', fontSize: 14 },
+  inputIconWrap: { position: 'relative', justifyContent: 'center' },
+  inputIcon: { position: 'absolute', left: 14, fontSize: 15, zIndex: 1 },
+  inputWithIcon: { paddingLeft: 38 },
+  // Fixed "+64" country-code label for the mobile field — decorative only,
+  // same as web's "🇳🇿 +64 ▾" pill (index.html). The field itself keeps
+  // storing the plain 0-prefixed local number.
+  phonePrefix: { position: 'absolute', left: 14, fontSize: 15, fontWeight: '700', color: '#475569', zIndex: 1 },
+  inputWithPrefix: { paddingLeft: 48 },
+  serviceBlock: {
+    marginTop: 16, backgroundColor: 'rgba(255,255,255,0.95)', borderRadius: 14, padding: 14,
+    shadowColor: '#0F172A', shadowOpacity: 0.06, shadowRadius: 10, shadowOffset: { width: 0, height: 3 }, elevation: 2,
+  },
   serviceBlockTitle: { fontSize: 14, fontWeight: '700', color: '#0F172A', marginBottom: 8 },
   selectAllRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
   selectAllLink: { color: '#2563EB', fontWeight: '700', fontSize: 13, marginBottom: 8 },
-  teamCard: { borderWidth: 1, borderColor: '#E2E8F0', borderRadius: 12, padding: 12, marginTop: 10, gap: 8 },
+  teamCard: { borderWidth: 1, borderColor: '#E2E8F0', backgroundColor: 'rgba(255,255,255,0.95)', borderRadius: 12, padding: 12, marginTop: 10, gap: 8 },
   timeRow: { marginTop: 8 },
-  reviewCard: { borderWidth: 1, borderColor: '#E2E8F0', borderRadius: 12, padding: 14, marginTop: 10 },
+  reviewCard: { borderWidth: 1, borderColor: '#E2E8F0', backgroundColor: 'rgba(255,255,255,0.95)', borderRadius: 12, padding: 14, marginTop: 10 },
   reviewLabel: { fontSize: 12, fontWeight: '700', color: '#94A3B8', textTransform: 'uppercase', marginBottom: 4 },
   reviewValue: { fontSize: 15, color: '#0F172A', fontWeight: '600' },
+  reviewValueWarn: { fontSize: 14, color: '#DC2626', fontWeight: '600' },
+  portfolioItemRow: { flexDirection: 'row', alignItems: 'center', gap: 10, marginTop: 10 },
+  portfolioThumb: { width: 56, height: 56, borderRadius: 10, backgroundColor: '#F1F5F9' },
+  portfolioCaptionInput: { flex: 1 },
   button: { flex: 1, backgroundColor: '#16A34A', borderRadius: 12, paddingVertical: 16, alignItems: 'center' },
   buttonDisabled: { opacity: 0.5 },
   buttonText: { color: '#fff', fontWeight: '700', fontSize: 16 },

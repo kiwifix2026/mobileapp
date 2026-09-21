@@ -34,6 +34,7 @@ export type PosterStackParamList = {
   MyJobs: undefined;
   PostJob: undefined;
   JobDetail: { jobId: string };
+  EditJob: { jobId: string };
   Profile: undefined;
 } & ChatStackParams;
 

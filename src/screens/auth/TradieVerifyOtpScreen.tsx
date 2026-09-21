@@ -4,6 +4,7 @@ import type { NativeStackScreenProps } from '@react-navigation/native-stack';
 import type { AuthStackParamList } from '../../navigation/types';
 import { verifyTradieSignupOtp } from '../../api/auth';
 import { ApiError } from '../../api/client';
+import ScreenBackground from '../../components/ScreenBackground';
 
 type Props = NativeStackScreenProps<AuthStackParamList, 'TradieVerifyOtp'>;
 
@@ -37,6 +38,7 @@ export default function TradieVerifyOtpScreen({ route, navigation }: Props) {
   };
 
   return (
+    <ScreenBackground>
     <SafeAreaView style={styles.safe}>
       <View style={styles.container}>
         <Text style={styles.title}>New here? Let's verify your email</Text>
@@ -62,16 +64,17 @@ export default function TradieVerifyOtpScreen({ route, navigation }: Props) {
         </Pressable>
       </View>
     </SafeAreaView>
+    </ScreenBackground>
   );
 }
 
 const styles = StyleSheet.create({
-  safe: { flex: 1, backgroundColor: '#fff' },
+  safe: { flex: 1 },
   container: { flex: 1, padding: 24, paddingTop: 48, gap: 12 },
   title: { fontSize: 24, fontWeight: '800', marginBottom: 4 },
   subtitle: { fontSize: 14, color: '#64748B', marginBottom: 16 },
   input: {
-    borderWidth: 1, borderColor: '#E2E8F0', borderRadius: 12,
+    borderWidth: 1, borderColor: '#E2E8F0', borderRadius: 12, backgroundColor: 'rgba(255,255,255,0.95)',
     paddingHorizontal: 16, paddingVertical: 14, fontSize: 24, letterSpacing: 8, textAlign: 'center',
   },
   error: { color: '#DC2626', fontSize: 13 },

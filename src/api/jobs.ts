@@ -32,6 +32,27 @@ export function getMyJob(token: string, jobId: string) {
   return apiFetch<Job>(`/jobs/${jobId}`, { token });
 }
 
+// Job poster editing an already-posted job — mirrors web's job-detail.html
+// "Edit job" form 1:1 (see UpdateJobDto/JobsService.update on the backend).
+// Same "undefined means leave it alone" partial-update contract as every
+// other edit endpoint in this app (UpsertTradieDto, etc.) — only send the
+// fields the edit screen actually changed.
+export type UpdateJobInput = Partial<{
+  category: string;
+  description: string;
+  urgency: string;
+  contact: string;
+  region: string;
+  city: string;
+  suburb: string;
+  address: string;
+  photos: string[];
+}>;
+
+export function updateJob(token: string, jobId: string, input: UpdateJobInput) {
+  return apiFetch<Job>(`/jobs/${jobId}`, { method: 'PATCH', token, body: input });
+}
+
 export function listApplicants(token: string, jobId: string) {
   return apiFetch<JobApplication[]>(`/jobs/${jobId}/applicants`, { token });
 }

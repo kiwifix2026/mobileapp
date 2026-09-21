@@ -32,6 +32,14 @@ export type Tradie = {
   photoUrl?: string | null;
   insuranceCertUrl?: string | null;
   approvalStatus?: 'PENDING' | 'APPROVED' | 'REJECTED';
+  // Set via POST /tradies/:email/dismiss-approval-banner (TradiesService.
+  // dismissApprovalBanner) once the tradie closes the approval-status
+  // banner — records WHICH status it was dismissed for, so the banner
+  // reappears the moment approvalStatus actually changes to something new
+  // (pending → approved, approved → a later rejection, etc.) rather than
+  // staying suppressed forever. Same field web's tradie-dashboard.html
+  // reads for this exact purpose.
+  approvalBannerDismissedForStatus?: 'PENDING' | 'APPROVED' | 'REJECTED' | null;
   // Region/areas picker fields — `areas[0]` is what TradiesController's own
   // loadRealAreaJobs()-equivalent logic uses as the "nearby" suburb filter.
   // See TradiesService.findMatching for the same near/far split job-side.
@@ -73,6 +81,11 @@ export type Job = {
   suburb?: string | null;
   address?: string | null;
   urgency?: string | null;
+  // Real schema field (Job.contact) — a preferred-contact-method free text
+  // ('Phone Call'/'Text Message'/'Email' by convention, same options web's
+  // job-detail.html edit form offers). PostJobScreen never collects this on
+  // create, so it's usually empty until set via EditJobScreen.
+  contact?: string | null;
   status: 'OPEN' | 'MATCHED' | 'COMPLETED' | 'CANCELLED';
   photos?: string[];
   createdAt: string;
