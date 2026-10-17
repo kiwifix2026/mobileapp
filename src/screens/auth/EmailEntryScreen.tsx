@@ -5,6 +5,7 @@ import type { AuthStackParamList } from '../../navigation/types';
 import { sendCustomerOtp, sendTradieLoginOtp, sendTradieSignupOtp } from '../../api/auth';
 import { ApiError } from '../../api/client';
 import ScreenBackground from '../../components/ScreenBackground';
+import LegalFooter, { TermsAgreement } from '../../components/LegalFooter';
 
 type Props = NativeStackScreenProps<AuthStackParamList, 'EmailEntry'>;
 
@@ -86,6 +87,8 @@ export default function EmailEntryScreen({ route, navigation }: Props) {
         >
           {loading ? <ActivityIndicator color="#fff" /> : <Text style={styles.buttonText}>Continue →</Text>}
         </Pressable>
+        <TermsAgreement />
+        <LegalFooter />
       </View>
     </SafeAreaView>
     </ScreenBackground>

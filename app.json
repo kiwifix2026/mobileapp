@@ -1,13 +1,14 @@
 {
   "expo": {
-    "name": "mobileapp",
+    "name": "KiwiFix",
     "slug": "mobileapp",
     "version": "1.0.0",
     "orientation": "portrait",
     "icon": "./assets/icon.png",
     "userInterfaceStyle": "light",
     "ios": {
-      "supportsTablet": true
+      "supportsTablet": true,
+      "bundleIdentifier": "nz.kiwifix.app"
     },
     "android": {
       "package": "nz.kiwifix.app",
@@ -26,6 +27,18 @@
       "eas": {
         "projectId": "510a5477-cc24-4aa0-af30-2e731d486305"
       }
-    }
+    },
+    "plugins": [
+      "@react-native-community/datetimepicker",
+      [
+        "expo-image-picker",
+        {
+          "photosPermission": "KiwiFix needs access to your photos so you can attach pictures to jobs and your profile."
+        }
+      ],
+      "expo-font",
+      "expo-secure-store",
+      "expo-status-bar"
+    ]
   }
 }

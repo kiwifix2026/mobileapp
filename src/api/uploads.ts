@@ -8,15 +8,51 @@ import { API_BASE, ApiError } from './client';
 // own comment) — a job poster can attach photos on job-step1 before
 // finishing OTP verification, so there's no token to send here anyway.
 
+// iPhone library photos come back from the picker with a fileName like
+// "IMG_1234.HEIC" and a mimeType of "image/heic" even though (with
+// quality < 1) the file the picker actually hands us at `uri` has been
+// re-encoded to JPEG. The backend only accepts JPG/PNG/WEBP/GIF and decides
+// by the MULTIPART content-type + filename, so sending the picker's
+// HEIC-flavoured name/type got a perfectly good JPEG rejected. Work out the
+// real type from the actual file's extension instead, and rename to match.
+function resolveUploadType(uri: string, fileName?: string, mimeType?: string) {
+  const uriExt = uri.split('?')[0].split('.').pop()?.toLowerCase() || '';
+  const nameExt = (fileName || '').split('.').pop()?.toLowerCase() || '';
+  const byExt: Record<string, string> = {
+    jpg: 'image/jpeg', jpeg: 'image/jpeg', png: 'image/png', webp: 'image/webp', gif: 'image/gif',
+  };
+  const isHeic = (e: string) => e === 'heic' || e === 'heif';
+
+  if (isHeic(uriExt)) {
+    // The file itself is still HEIC (picker didn't transcode) — the backend
+    // can't read it, so fail with a clear message instead of a vague 400.
+    throw new Error('This photo is in HEIC format. Please choose a different photo or set your iPhone camera to "Most Compatible".');
+  }
+  const mime = byExt[uriExt] || (mimeType && !/hei[cf]/i.test(mimeType) ? mimeType : '') || byExt[nameExt] || 'image/jpeg';
+  const ext = Object.keys(byExt).find((k) => byExt[k] === mime && k !== 'jpeg') || 'jpg';
+  const base = (fileName || uri.split('/').pop() || `photo-${Date.now()}`).replace(/\.[^.]+$/, '');
+  return { mime, name: `${base}.${ext}` };
+}
+
 export async function uploadPhoto(uri: string, fileName?: string, mimeType?: string): Promise<string> {
-  const name = fileName || uri.split('/').pop() || `photo-${Date.now()}.jpg`;
-  const type = mimeType || guessMimeType(name);
+  const { mime: type, name } = resolveUploadType(uri, fileName, mimeType);
+
+  // React Native's fetch/FormData used to accept a {uri, name, type} shorthand
+  // in place of a real Blob/File, streaming the file straight off the uri.
+  // React Native 0.86 (bundled with Expo SDK 57) tightened FormData's part
+  // validation and rejects that shorthand outright with "Unsupported
+  // FormDataPart implementation" — so we fetch the local file into a real
+  // Blob first (RN's fetch supports file:// URIs for this) and append that
+  // instead, which both the old and new FormData implementations accept.
+  const fileResponse = await fetch(uri);
+  const raw = await fileResponse.blob();
+  // RN infers a local file Blob's type from its extension and can leave it
+  // empty, which multer then sees as application/octet-stream and rejects.
+  // slice() with an explicit type pins the correct content-type.
+  const blob = raw.slice(0, raw.size, type);
 
   const form = new FormData();
-  // React Native's fetch/FormData accepts this {uri, name, type} shape in
-  // place of a real Blob/File — RN's networking layer streams the file
-  // straight off the uri, not through a base64 conversion in JS.
-  form.append('file', { uri, name, type } as unknown as Blob);
+  form.append('file', blob, name);
 
   const res = await fetch(`${API_BASE}/uploads`, { method: 'POST', body: form });
 

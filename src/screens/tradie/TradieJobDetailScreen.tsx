@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { View, Text, Pressable, StyleSheet, SafeAreaView, ScrollView, ActivityIndicator, Image } from 'react-native';
+import { View, Text, TextInput, Pressable, StyleSheet, SafeAreaView, ScrollView, ActivityIndicator, Image, Modal } from 'react-native';
 import type { NativeStackScreenProps } from '@react-navigation/native-stack';
 import { useBottomTabBarHeight } from '@react-navigation/bottom-tabs';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
@@ -11,6 +11,9 @@ import { getSignedUrl } from '../../api/uploads';
 import { useAuth } from '../../auth/AuthContext';
 import { ApiError } from '../../api/client';
 import ScreenBackground from '../../components/ScreenBackground';
+import DateTimeField from '../../components/DateTimeField';
+import { useSavedJobs } from '../../api/useSavedJobs';
+import { createCalendarEvent } from '../../api/extras';
 
 type Props = NativeStackScreenProps<TradieStackParamList, 'TradieJobDetail'>;
 
@@ -97,6 +100,39 @@ export default function TradieJobDetailScreen({ route, navigation }: Props) {
     },
   });
 
+  // Save for later — web's ☆ Save / ★ Saved toggle on each job card.
+  const savedJobs = useSavedJobs();
+  const isSaved = savedJobs.isSaved(jobId);
+
+  // "Add to calendar" — web's tradie-job-view.html button, only for jobs this
+  // tradie has been ACCEPTED on (the backend rejects it otherwise).
+  const [calOpen, setCalOpen] = useState(false);
+  const [calStart, setCalStart] = useState(() => {
+    const d = new Date();
+    d.setDate(d.getDate() + 1);
+    d.setHours(9, 0, 0, 0);
+    return d;
+  });
+  const [calEnd, setCalEnd] = useState<Date | null>(null);
+  const [calNotes, setCalNotes] = useState('');
+  const [calError, setCalError] = useState<string | null>(null);
+  const [calDone, setCalDone] = useState(false);
+  const addToCalendar = useMutation({
+    mutationFn: () =>
+      createCalendarEvent(session!.token, session!.email, {
+        jobId,
+        startAt: calStart.toISOString(),
+        endAt: calEnd ? calEnd.toISOString() : undefined,
+        notes: calNotes.trim() || undefined,
+      }),
+    onSuccess: () => {
+      setCalOpen(false);
+      setCalDone(true);
+      queryClient.invalidateQueries({ queryKey: ['calendarEvents', session!.email] });
+    },
+    onError: (err) => setCalError(err instanceof ApiError ? err.message : 'Could not add to calendar.'),
+  });
+
   // Same bug class fixed on the poster side's JobDetailScreen: this used to
   // be an unconditional `isLoading || !job` spinner with no error branch —
   // any failed fetch left `isLoading` false and `job` undefined forever, so
@@ -140,6 +176,13 @@ export default function TradieJobDetailScreen({ route, navigation }: Props) {
               <Text style={styles.invitedBadgeText}>💼 Invited</Text>
             </View>
           )}
+          <Pressable
+            style={[styles.saveBtn, isSaved && styles.saveBtnOn]}
+            hitSlop={8}
+            onPress={() => savedJobs.toggle(jobId)}
+          >
+            <Text style={[styles.saveBtnText, isSaved && styles.saveBtnTextOn]}>{isSaved ? '★ Saved' : '☆ Save'}</Text>
+          </Pressable>
         </View>
         <Text style={styles.description}>{job.description}</Text>
         {(job.suburb || job.city) && (
@@ -189,6 +232,12 @@ export default function TradieJobDetailScreen({ route, navigation }: Props) {
           <Text style={styles.messageBtnText}>💬 Message the job poster</Text>
         </Pressable>
 
+        {job.myApplicationStatus === 'accepted' && (
+          <Pressable style={styles.calendarBtn} onPress={() => { setCalError(null); setCalOpen(true); }}>
+            <Text style={styles.calendarBtnText}>{calDone ? '✓ Added — add another time' : '📅 Add to calendar'}</Text>
+          </Pressable>
+        )}
+
         {(applied || job.myApplicationStatus === 'pending' || job.myApplicationStatus === 'accepted') ? (
           <View style={styles.appliedBanner}>
             <Text style={styles.appliedBannerText}>
@@ -221,12 +270,65 @@ export default function TradieJobDetailScreen({ route, navigation }: Props) {
           </>
         )}
       </ScrollView>
+
+      <Modal visible={calOpen} transparent animationType="slide" onRequestClose={() => setCalOpen(false)}>
+        <View style={styles.modalOverlay}>
+          <View style={styles.modalSheet}>
+            <Text style={styles.modalTitle}>Add to calendar</Text>
+            <DateTimeField label="Starts" value={calStart} onChange={setCalStart} />
+            <View style={{ height: 12 }} />
+            {calEnd ? (
+              <View>
+                <DateTimeField label="Ends" value={calEnd} onChange={setCalEnd} />
+                <Pressable onPress={() => setCalEnd(null)}><Text style={styles.modalLink}>Remove end time</Text></Pressable>
+              </View>
+            ) : (
+              <Pressable onPress={() => setCalEnd(new Date(calStart.getTime() + 60 * 60 * 1000))}>
+                <Text style={styles.modalLink}>+ Add end time</Text>
+              </Pressable>
+            )}
+            <Text style={styles.modalLabel}>Notes (optional)</Text>
+            <TextInput style={styles.modalTextarea} value={calNotes} onChangeText={setCalNotes} multiline />
+            {calError && <Text style={styles.error}>⚠️ {calError}</Text>}
+            <View style={styles.modalActions}>
+              <Pressable style={[styles.modalBtn, styles.modalCancel]} onPress={() => setCalOpen(false)}>
+                <Text style={styles.modalCancelText}>Cancel</Text>
+              </Pressable>
+              <Pressable
+                style={[styles.modalBtn, styles.modalSave, addToCalendar.isPending && { opacity: 0.5 }]}
+                disabled={addToCalendar.isPending}
+                onPress={() => addToCalendar.mutate()}
+              >
+                <Text style={styles.modalSaveText}>{addToCalendar.isPending ? 'Adding…' : 'Add'}</Text>
+              </Pressable>
+            </View>
+          </View>
+        </View>
+      </Modal>
     </SafeAreaView>
     </ScreenBackground>
   );
 }
 
 const styles = StyleSheet.create({
+  saveBtn: { borderWidth: 1, borderColor: '#BBF7D0', backgroundColor: '#fff', borderRadius: 10, paddingHorizontal: 10, paddingVertical: 6 },
+  saveBtnOn: { backgroundColor: '#F0FDF4' },
+  saveBtnText: { color: '#64748B', fontWeight: '700', fontSize: 12 },
+  saveBtnTextOn: { color: '#16A34A' },
+  calendarBtn: { backgroundColor: '#F0FDF4', borderWidth: 1, borderColor: '#BBF7D0', borderRadius: 12, paddingVertical: 14, alignItems: 'center', marginTop: 12 },
+  calendarBtnText: { color: '#16A34A', fontWeight: '700', fontSize: 15 },
+  modalOverlay: { flex: 1, backgroundColor: 'rgba(15,23,42,0.4)', justifyContent: 'flex-end' },
+  modalSheet: { backgroundColor: '#fff', borderTopLeftRadius: 20, borderTopRightRadius: 20, padding: 20, paddingBottom: 32 },
+  modalTitle: { fontSize: 18, fontWeight: '800', marginBottom: 14, color: '#14251B' },
+  modalLabel: { fontSize: 13, fontWeight: '700', color: '#334155', marginTop: 12, marginBottom: 6 },
+  modalLink: { color: '#2563EB', fontWeight: '600', fontSize: 13, marginTop: 8 },
+  modalTextarea: { borderWidth: 1, borderColor: '#E2E8F0', borderRadius: 12, paddingHorizontal: 14, paddingVertical: 12, fontSize: 15, minHeight: 70, textAlignVertical: 'top' },
+  modalActions: { flexDirection: 'row', gap: 10, marginTop: 16 },
+  modalBtn: { flex: 1, borderRadius: 12, paddingVertical: 14, alignItems: 'center' },
+  modalCancel: { backgroundColor: '#F1F5F9' },
+  modalCancelText: { color: '#475569', fontWeight: '700' },
+  modalSave: { backgroundColor: '#16A34A' },
+  modalSaveText: { color: '#fff', fontWeight: '700' },
   safe: { flex: 1 },
   container: { padding: 20, paddingBottom: 60 },
   categoryRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: 8, marginBottom: 8 },

@@ -202,7 +202,7 @@ export default function TradieOnboardingScreen({ route }: Props) {
       onError('Photo library access is needed.');
       return;
     }
-    const result = await ImagePicker.launchImageLibraryAsync({ mediaTypes: ImagePicker.MediaTypeOptions.Images, quality: 0.8 });
+    const result = await ImagePicker.launchImageLibraryAsync({ mediaTypes: ImagePicker.MediaTypeOptions.Images, quality: 0.8, preferredAssetRepresentationMode: ImagePicker.UIImagePickerPreferredAssetRepresentationMode.Compatible });
     if (result.canceled || !result.assets?.length) return;
     const asset = result.assets[0];
     onStart(asset.uri);
@@ -210,7 +210,14 @@ export default function TradieOnboardingScreen({ route }: Props) {
       const key = await uploadPhoto(asset.uri, asset.fileName || undefined, asset.mimeType || undefined);
       onDone(key, asset.uri);
     } catch (err) {
-      onError(err instanceof ApiError ? err.message : 'Could not upload that photo. Please try again.');
+      console.error('[pickAndUpload] photo upload failed:', err);
+      onError(
+        err instanceof ApiError
+          ? err.message
+          : err instanceof Error
+          ? `Could not upload that photo: ${err.message}`
+          : 'Could not upload that photo. Please try again.'
+      );
     }
   }
 

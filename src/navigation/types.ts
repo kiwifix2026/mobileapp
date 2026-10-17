@@ -18,6 +18,10 @@ export type AuthStackParamList = {
 export type ChatStackParams = {
   Conversations: undefined;
   ChatThread: { conversationId: string; jobCategory: string; counterpartName: string };
+  // Pinned read-only KiwiFix-team thread — job posters only (see
+  // ConversationsListScreen); registered in PosterNavigator's MessagesStack.
+  KiwiFixInbox: undefined;
+  PosterNotifications: undefined;
 };
 
 // One flat param-list type shared by every nested Stack.Navigator inside
@@ -36,6 +40,7 @@ export type PosterStackParamList = {
   JobDetail: { jobId: string };
   EditJob: { jobId: string };
   Profile: undefined;
+  EditPosterProfile: undefined;
 } & ChatStackParams;
 
 export type PosterTabParamList = {
@@ -60,6 +65,9 @@ export type TradieStackParamList = {
   EditProfile: undefined;
   ViewProfile: undefined;
   ProfileMenu: undefined;
+  // Mirrors web's tradie-dashboard "Saved Jobs" card and tradie-calendar.html.
+  SavedJobs: undefined;
+  Calendar: undefined;
 } & ChatStackParams;
 
 export type TradieTabParamList = {

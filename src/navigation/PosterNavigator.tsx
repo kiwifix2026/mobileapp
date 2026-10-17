@@ -11,6 +11,9 @@ import PostJobScreen from '../screens/poster/PostJobScreen';
 import JobDetailScreen from '../screens/poster/JobDetailScreen';
 import EditJobScreen from '../screens/poster/EditJobScreen';
 import ProfileScreen from '../screens/poster/ProfileScreen';
+import EditPosterProfileScreen from '../screens/poster/EditPosterProfileScreen';
+import { PosterNotificationsScreen, KiwiFixInboxScreen } from '../screens/poster/PosterInboxScreens';
+import { useCustomerUnread } from '../api/useCustomerUnread';
 import ConversationsListScreen from '../screens/shared/ConversationsListScreen';
 import ChatThreadScreen from '../screens/shared/ChatThreadScreen';
 import { getConversationsUnreadCount } from '../api/conversations';
@@ -32,6 +35,7 @@ function HomeStack() {
       <Stack.Screen name="JobDetail" component={JobDetailScreen} options={{ title: 'Job Details' }} />
       <Stack.Screen name="EditJob" component={EditJobScreen} options={{ headerShown: false }} />
       <Stack.Screen name="ChatThread" component={ChatThreadScreen} options={{ title: '' }} />
+      <Stack.Screen name="PosterNotifications" component={PosterNotificationsScreen} options={{ title: 'Notifications' }} />
       {/* Home's "See all →" pushes the full list here too, rather than
           switching tabs — keeps that link a simple in-stack push. */}
       <Stack.Screen name="MyJobs" component={MyJobsScreen} options={{ title: 'My Jobs' }} />
@@ -54,6 +58,8 @@ function MessagesStack() {
     <Stack.Navigator screenOptions={{ headerBackTitle: 'Back' }}>
       <Stack.Screen name="Conversations" component={ConversationsListScreen} options={{ title: 'Messages' }} />
       <Stack.Screen name="ChatThread" component={ChatThreadScreen} options={{ title: '' }} />
+      <Stack.Screen name="KiwiFixInbox" component={KiwiFixInboxScreen} options={{ title: 'KiwiFix' }} />
+      <Stack.Screen name="PosterNotifications" component={PosterNotificationsScreen} options={{ title: 'Notifications' }} />
     </Stack.Navigator>
   );
 }
@@ -61,6 +67,7 @@ function ProfileStack() {
   return (
     <Stack.Navigator screenOptions={{ headerBackTitle: 'Back' }}>
       <Stack.Screen name="Profile" component={ProfileScreen} options={{ headerShown: false }} />
+      <Stack.Screen name="EditPosterProfile" component={EditPosterProfileScreen} options={{ title: 'Edit Profile' }} />
     </Stack.Navigator>
   );
 }
@@ -86,7 +93,7 @@ const TAB_LABELS: Record<keyof PosterTabParamList, string> = {
 // the tab bar also showing underneath it, the two fixed bottom bars stacked
 // and clipped the last bit of scrollable content. Hide the tab bar whenever
 // PostJob is the focused screen within a tab's nested stack.
-const FULL_SCREEN_ROUTES = new Set(['PostJob', 'EditJob']);
+const FULL_SCREEN_ROUTES = new Set(['PostJob', 'EditJob', 'EditPosterProfile']);
 
 export default function PosterNavigator() {
   const { session } = useAuth();
@@ -100,6 +107,10 @@ export default function PosterNavigator() {
     enabled: !!session,
     refetchInterval: 20000,
   });
+  // Unread poster notifications + KiwiFix-team messages (web's bell /
+  // pinned KiwiFix thread badges) add to the Messages tab total.
+  const customerUnread = useCustomerUnread();
+  const messagesBadge = (unreadCount || 0) + customerUnread.notifications + customerUnread.kiwifix;
 
   return (
     <Tab.Navigator
@@ -123,7 +134,7 @@ export default function PosterNavigator() {
       <Tab.Screen
         name="MessagesTab"
         component={MessagesStack}
-        options={{ tabBarBadge: unreadCount ? unreadCount : undefined }}
+        options={{ tabBarBadge: messagesBadge ? messagesBadge : undefined }}
       />
       <Tab.Screen name="ProfileTab" component={ProfileStack} />
     </Tab.Navigator>

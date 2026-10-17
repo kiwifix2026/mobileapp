@@ -204,6 +204,9 @@ export default function PostJobScreen({ navigation }: Props) {
     const result = await ImagePicker.launchImageLibraryAsync({
       mediaTypes: ImagePicker.MediaTypeOptions.Images,
       quality: 0.8,
+      // iOS: force the picker to hand back a JPEG instead of the original
+      // HEIC (the backend can't read HEIC). Android ignores this.
+      preferredAssetRepresentationMode: ImagePicker.UIImagePickerPreferredAssetRepresentationMode.Compatible,
     });
     if (result.canceled || !result.assets?.length) return;
 
@@ -216,7 +219,14 @@ export default function PostJobScreen({ navigation }: Props) {
       setPhotos((prev) => prev.map((p) => (p.uri === asset.uri ? { ...p, key, uploading: false } : p)));
     } catch (err) {
       setPhotos((prev) => prev.filter((p) => p.uri !== asset.uri));
-      setPhotoError(err instanceof ApiError ? err.message : 'Could not upload that photo. Please try again.');
+      console.error('[PostJobScreen] photo upload failed:', err);
+      setPhotoError(
+        err instanceof ApiError
+          ? err.message
+          : err instanceof Error
+          ? `Could not upload that photo: ${err.message}`
+          : 'Could not upload that photo. Please try again.'
+      );
     }
   }
 
@@ -578,7 +588,7 @@ const styles = StyleSheet.create({
   photoRow: { flexDirection: 'row', flexWrap: 'wrap', gap: 10 },
   photoThumbWrap: { width: 80, height: 80, borderRadius: 12, overflow: 'hidden', position: 'relative' },
   photoThumb: { width: '100%', height: '100%' },
-  photoOverlay: { ...StyleSheet.absoluteFillObject, backgroundColor: 'rgba(0,0,0,0.4)', alignItems: 'center', justifyContent: 'center' },
+  photoOverlay: { ...StyleSheet.absoluteFill, backgroundColor: 'rgba(0,0,0,0.4)', alignItems: 'center', justifyContent: 'center' },
   photoRemove: { position: 'absolute', top: 4, right: 4, backgroundColor: 'rgba(0,0,0,0.6)', borderRadius: 10, width: 20, height: 20, alignItems: 'center', justifyContent: 'center' },
   photoRemoveText: { color: '#fff', fontSize: 12, fontWeight: '700' },
   photoAdd: {

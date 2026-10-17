@@ -68,7 +68,7 @@ export default function LicenceDateField({ value, onChange, placeholder = 'Selec
         <Modal visible={open} transparent animationType="slide" onRequestClose={() => setOpen(false)}>
           <Pressable style={styles.overlay} onPress={() => setOpen(false)}>
             <Pressable style={styles.sheet} onPress={(e) => e.stopPropagation()}>
-              <DateTimePicker value={current} mode="date" display="spinner" minimumDate={today} onChange={handleChange} />
+              <DateTimePicker value={current} mode="date" display="spinner" minimumDate={today} onChange={handleChange} themeVariant="light" textColor="#0F172A" style={styles.picker} />
               <Pressable style={styles.doneBtn} onPress={() => setOpen(false)}>
                 <Text style={styles.doneBtnText}>Done</Text>
               </Pressable>
@@ -81,6 +81,9 @@ export default function LicenceDateField({ value, onChange, placeholder = 'Selec
 }
 
 const styles = StyleSheet.create({
+  // Explicit size + light theme: on a phone in dark mode the spinner drew
+  // white text on this white sheet (only the grey selection pill showed).
+  picker: { height: 216, alignSelf: 'stretch' },
   field: {
     borderWidth: 1, borderColor: '#E2E8F0', borderRadius: 12,
     paddingHorizontal: 14, paddingVertical: 12,

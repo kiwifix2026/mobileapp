@@ -9,6 +9,7 @@ import type { ConversationSummary } from '../../api/types';
 import { listConversations } from '../../api/conversations';
 import { useAuth } from '../../auth/AuthContext';
 import ScreenBackground from '../../components/ScreenBackground';
+import { useCustomerUnread } from '../../api/useCustomerUnread';
 
 type Props = NativeStackScreenProps<ChatStackParams, 'Conversations'>;
 
@@ -33,6 +34,11 @@ export default function ConversationsListScreen({ navigation }: Props) {
   const role = session!.role;
   const tradieEmail = role === 'tradie' ? session!.email : undefined;
   const tabBarHeight = useBottomTabBarHeight();
+  // Job posters get two pinned rows above their chats — the read-only
+  // KiwiFix team thread and their notifications (mirrors web's messages.html
+  // pinned KiwiFix conversation + the dashboard bell). Tradies have their own
+  // Notifications screen reached from the Home bell, so nothing is pinned.
+  const customerUnread = useCustomerUnread();
 
   const { data: conversations, isLoading, refetch, isRefetching } = useQuery({
     queryKey: ['conversations'],
@@ -63,6 +69,34 @@ export default function ConversationsListScreen({ navigation }: Props) {
           keyExtractor={(c) => c.id}
           contentContainerStyle={[styles.list, { paddingBottom: tabBarHeight + 20 }]}
           refreshControl={<RefreshControl refreshing={isRefetching} onRefresh={refetch} />}
+          ListHeaderComponent={
+            role === 'customer' ? (
+              <View>
+                <Pressable style={styles.card} onPress={() => navigation.navigate('KiwiFixInbox')}>
+                  <View style={styles.cardTop}>
+                    <Text style={styles.name}>KiwiFix</Text>
+                    {customerUnread.kiwifix > 0 && (
+                      <View style={styles.unreadBadge}>
+                        <Text style={styles.unreadBadgeText}>{customerUnread.kiwifix}</Text>
+                      </View>
+                    )}
+                  </View>
+                  <Text style={styles.jobCategory}>Official messages from the KiwiFix team</Text>
+                </Pressable>
+                <Pressable style={styles.card} onPress={() => navigation.navigate('PosterNotifications')}>
+                  <View style={styles.cardTop}>
+                    <Text style={styles.name}>Notifications</Text>
+                    {customerUnread.notifications > 0 && (
+                      <View style={styles.unreadBadge}>
+                        <Text style={styles.unreadBadgeText}>{customerUnread.notifications}</Text>
+                      </View>
+                    )}
+                  </View>
+                  <Text style={styles.jobCategory}>Applications, invites and job updates</Text>
+                </Pressable>
+              </View>
+            ) : null
+          }
           ListEmptyComponent={<Text style={styles.empty}>No messages yet.</Text>}
           renderItem={({ item }) => {
             const name = counterpartName(role, item);

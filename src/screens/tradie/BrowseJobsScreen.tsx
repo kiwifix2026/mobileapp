@@ -13,6 +13,7 @@ import { getApprovedTrades } from '../../api/trades';
 import { getSignedUrl } from '../../api/uploads';
 import { useAuth } from '../../auth/AuthContext';
 import ScreenBackground from '../../components/ScreenBackground';
+import { useSavedJobs } from '../../api/useSavedJobs';
 
 type Props = NativeStackScreenProps<TradieStackParamList, 'BrowseJobs'>;
 
@@ -37,6 +38,7 @@ export default function BrowseJobsScreen({ navigation }: Props) {
   // — this is a tab-bar-visible screen, so a long enough near/far job list
   // can have its last card sit under the tab bar without this.
   const tabBarHeight = useBottomTabBarHeight();
+  const savedJobs = useSavedJobs();
 
   // Cosmetic only, exactly like the web dashboard's toggleAvail() — that
   // toggle has never once written to the backend there either, it just
@@ -320,6 +322,18 @@ export default function BrowseJobsScreen({ navigation }: Props) {
           </Pressable>
         </View>
 
+        {/* Web dashboard's Saved Jobs card + "View calendar" link. */}
+        <View style={styles.quickRow}>
+          <Pressable style={styles.quickBtn} onPress={() => navigation.navigate('SavedJobs')}>
+            <Ionicons name="bookmark-outline" size={16} color="#16A34A" />
+            <Text style={styles.quickText}>Saved jobs{savedJobs.saved.length ? ` (${savedJobs.saved.length})` : ''}</Text>
+          </Pressable>
+          <Pressable style={styles.quickBtn} onPress={() => navigation.navigate('Calendar')}>
+            <Ionicons name="calendar-outline" size={16} color="#16A34A" />
+            <Text style={styles.quickText}>Calendar</Text>
+          </Pressable>
+        </View>
+
         <Text style={styles.sectionTitle}>📍 New Jobs in Your Area</Text>
         {isLoading || (categories.length > 0 && jobsLoading) ? (
           <ActivityIndicator style={{ marginTop: 20 }} />
@@ -337,6 +351,8 @@ export default function BrowseJobsScreen({ navigation }: Props) {
                     key={item.id}
                     job={item}
                     icon={iconByCategory.get(item.category) || '🔧'}
+                    saved={savedJobs.isSaved(item.id)}
+                    onToggleSave={() => savedJobs.toggle(item.id)}
                     onPress={() => navigation.navigate('TradieJobDetail', { jobId: item.id })}
                   />
                 ))}
@@ -350,6 +366,8 @@ export default function BrowseJobsScreen({ navigation }: Props) {
                     key={item.id}
                     job={item}
                     icon={iconByCategory.get(item.category) || '🔧'}
+                    saved={savedJobs.isSaved(item.id)}
+                    onToggleSave={() => savedJobs.toggle(item.id)}
                     onPress={() => navigation.navigate('TradieJobDetail', { jobId: item.id })}
                   />
                 ))}
@@ -376,7 +394,7 @@ function JobCardThumb({ photoKey }: { photoKey: string }) {
   return <Image source={{ uri: url }} style={styles.cardThumb} />;
 }
 
-function JobCard({ job, icon, onPress }: { job: Job; icon: string; onPress: () => void }) {
+function JobCard({ job, icon, onPress, saved, onToggleSave }: { job: Job; icon: string; onPress: () => void; saved: boolean; onToggleSave: () => void }) {
   const photos = job.photos || [];
   const shownPhotos = photos.slice(0, 3);
   const overflow = photos.length - shownPhotos.length;
@@ -411,7 +429,12 @@ function JobCard({ job, icon, onPress }: { job: Job; icon: string; onPress: () =
           </Text>
         )}
       </View>
-      <Text style={styles.jobCardChevron}>›</Text>
+      <View style={{ alignItems: 'flex-end', gap: 8 }}>
+        <Pressable hitSlop={8} onPress={onToggleSave} style={[styles.saveChip, saved && styles.saveChipOn]}>
+          <Text style={[styles.saveChipText, saved && styles.saveChipTextOn]}>{saved ? '★ Saved' : '☆ Save'}</Text>
+        </Pressable>
+        <Text style={styles.jobCardChevron}>›</Text>
+      </View>
     </Pressable>
   );
 }
@@ -421,6 +444,17 @@ const CARD_SHADOW = {
 };
 
 const styles = StyleSheet.create({
+  quickRow: { flexDirection: 'row', gap: 10, marginBottom: 16 },
+  quickBtn: {
+    flex: 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 6,
+    backgroundColor: 'rgba(255,255,255,0.94)', borderRadius: 14, paddingVertical: 12,
+    borderWidth: 1, borderColor: '#BBF7D0',
+  },
+  quickText: { color: '#14532D', fontWeight: '700', fontSize: 13 },
+  saveChip: { borderWidth: 1, borderColor: '#BBF7D0', backgroundColor: '#fff', borderRadius: 10, paddingHorizontal: 8, paddingVertical: 4 },
+  saveChipOn: { backgroundColor: '#F0FDF4' },
+  saveChipText: { color: '#64748B', fontWeight: '700', fontSize: 11 },
+  saveChipTextOn: { color: '#16A34A' },
   safe: { flex: 1 },
   scroll: { padding: 20, paddingBottom: 40 },
   header: { flexDirection: 'row', alignItems: 'center', gap: 12, marginBottom: 14 },

@@ -9,6 +9,7 @@ import { getTradieByEmail } from '../../api/tradies';
 import { getSignedUrl } from '../../api/uploads';
 import { useAuth } from '../../auth/AuthContext';
 import ScreenBackground from '../../components/ScreenBackground';
+import LegalFooter from '../../components/LegalFooter';
 
 type Props = NativeStackScreenProps<TradieStackParamList, 'ProfileMenu'>;
 
@@ -126,6 +127,20 @@ export default function ProfileMenuScreen({ navigation }: Props) {
               title="Edit Profile"
               subtitle="Update your information"
               onPress={() => navigation.navigate('EditProfile')}
+            />
+            <MenuRow
+              icon={<Ionicons name="bookmark-outline" size={22} color="#16A34A" />}
+              iconTint="rgba(22,163,74,0.12)"
+              title="Saved Jobs"
+              subtitle="Jobs you've saved for later"
+              onPress={() => navigation.navigate('SavedJobs')}
+            />
+            <MenuRow
+              icon={<Ionicons name="calendar-outline" size={22} color="#16A34A" />}
+              iconTint="rgba(22,163,74,0.12)"
+              title="Calendar"
+              subtitle="Your scheduled jobs"
+              onPress={() => navigation.navigate('Calendar')}
               isLast
             />
           </View>
@@ -141,6 +156,8 @@ export default function ProfileMenuScreen({ navigation }: Props) {
               isLast
             />
           </View>
+
+          <LegalFooter style={{ marginTop: 24 }} />
         </ScrollView>
       </SafeAreaView>
     </ScreenBackground>

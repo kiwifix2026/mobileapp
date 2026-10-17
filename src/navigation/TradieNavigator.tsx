@@ -13,6 +13,8 @@ import NotificationsScreen from '../screens/tradie/NotificationsScreen';
 import EditProfileScreen from '../screens/tradie/EditProfileScreen';
 import ViewProfileScreen from '../screens/tradie/ViewProfileScreen';
 import ProfileMenuScreen from '../screens/tradie/ProfileMenuScreen';
+import SavedJobsScreen from '../screens/tradie/SavedJobsScreen';
+import CalendarScreen from '../screens/tradie/CalendarScreen';
 import ConversationsListScreen from '../screens/shared/ConversationsListScreen';
 import ChatThreadScreen from '../screens/shared/ChatThreadScreen';
 import { getConversationsUnreadCount } from '../api/conversations';
@@ -42,6 +44,8 @@ function HomeStack() {
           previously only reachable from the Profile tab menu, where it was
           easy to miss — see ProfileMenuScreen.tsx). */}
       <Stack.Screen name="Notifications" component={NotificationsScreen} options={{ title: 'Notifications' }} />
+      <Stack.Screen name="SavedJobs" component={SavedJobsScreen} options={{ title: 'Saved Jobs' }} />
+      <Stack.Screen name="Calendar" component={CalendarScreen} options={{ title: 'Calendar' }} />
       <Stack.Screen name="TradieJobDetail" component={TradieJobDetailScreen} options={{ title: 'Job Details' }} />
       <Stack.Screen name="ChatThread" component={ChatThreadScreen} options={{ title: '' }} />
     </Stack.Navigator>
@@ -52,6 +56,8 @@ function JobsStack() {
     <Stack.Navigator screenOptions={{ headerBackTitle: 'Back' }}>
       <Stack.Screen name="MyApplications" component={MyApplicationsScreen} options={{ title: 'My Applications' }} />
       <Stack.Screen name="TradieJobInvites" component={TradieJobInvitesScreen} options={{ title: 'Job Invites' }} />
+      <Stack.Screen name="SavedJobs" component={SavedJobsScreen} options={{ title: 'Saved Jobs' }} />
+      <Stack.Screen name="Calendar" component={CalendarScreen} options={{ title: 'Calendar' }} />
       <Stack.Screen name="TradieJobDetail" component={TradieJobDetailScreen} options={{ title: 'Job Details' }} />
       <Stack.Screen name="ChatThread" component={ChatThreadScreen} options={{ title: '' }} />
     </Stack.Navigator>
@@ -71,6 +77,8 @@ function ProfileStack() {
       <Stack.Screen name="ProfileMenu" component={ProfileMenuScreen} options={{ headerShown: false }} />
       <Stack.Screen name="ViewProfile" component={ViewProfileScreen} options={{ title: 'My Profile' }} />
       <Stack.Screen name="EditProfile" component={EditProfileScreen} options={{ title: 'Edit Profile' }} />
+      <Stack.Screen name="SavedJobs" component={SavedJobsScreen} options={{ title: 'Saved Jobs' }} />
+      <Stack.Screen name="Calendar" component={CalendarScreen} options={{ title: 'Calendar' }} />
       <Stack.Screen name="TradieJobDetail" component={TradieJobDetailScreen} options={{ title: 'Job Details' }} />
       <Stack.Screen name="ChatThread" component={ChatThreadScreen} options={{ title: '' }} />
     </Stack.Navigator>

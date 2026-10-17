@@ -6,6 +6,7 @@ import { useBottomTabBarHeight } from '@react-navigation/bottom-tabs';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import type { PosterStackParamList } from '../../navigation/types';
 import { getMyJob, listApplicants, acceptApplicant, declineApplicant, completeJob, inviteTradie } from '../../api/jobs';
+import { deleteJob } from '../../api/extras';
 import { startConversation } from '../../api/conversations';
 import { listMatchingTradies } from '../../api/tradies';
 import { getApprovedTrades } from '../../api/trades';
@@ -398,6 +399,30 @@ export default function JobDetailScreen({ route, navigation }: Props) {
     mutationFn: () => completeJob(token, jobId),
     onSuccess: invalidate,
   });
+  // Mirrors web's job-poster-dashboard deleteJob(): confirm first (with the
+  // extra warning if a tradie is already assigned — the backend notifies
+  // them), then DELETE /jobs/:id and go back to the list.
+  const remove = useMutation({
+    mutationFn: () => deleteJob(token, jobId),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['myJobs'] });
+      queryClient.removeQueries({ queryKey: ['job', jobId] });
+      navigation.goBack();
+    },
+    onError: (err) =>
+      Alert.alert('Could not delete job', err instanceof ApiError ? err.message : 'Please try again.'),
+  });
+  const handleDelete = () => {
+    const warning =
+      job?.status === 'MATCHED'
+        ? "You already accepted a tradie for this job. Deleting it will notify them that it's been cancelled. Delete anyway?"
+        : "Delete this job posting? This can't be undone.";
+    Alert.alert('Delete job', warning, [
+      { text: 'Cancel', style: 'cancel' },
+      { text: 'Delete', style: 'destructive', onPress: () => remove.mutate() },
+    ]);
+  };
+
   const message = useMutation({
     mutationFn: (tradieId: string) => startConversation('customer', token, jobId, { tradieId }),
     onSuccess: (conversation, tradieId) => {
@@ -477,6 +502,10 @@ export default function JobDetailScreen({ route, navigation }: Props) {
           <Pressable style={styles.editJobBtn} onPress={() => navigation.navigate('EditJob', { jobId })}>
             <Ionicons name="pencil" size={13} color="#16A34A" />
             <Text style={styles.editJobBtnText}>Edit</Text>
+          </Pressable>
+          <Pressable style={styles.deleteJobBtn} onPress={handleDelete} disabled={remove.isPending}>
+            <Ionicons name="trash-outline" size={13} color="#DC2626" />
+            <Text style={styles.deleteJobBtnText}>{remove.isPending ? 'Deleting…' : 'Delete'}</Text>
           </Pressable>
         </View>
         <Text style={styles.description}>{job.description}</Text>
@@ -646,6 +675,8 @@ const styles = StyleSheet.create({
   category: { fontSize: 24, fontWeight: '800', marginBottom: 8 },
   editJobBtn: { flexDirection: 'row', alignItems: 'center', gap: 5, backgroundColor: '#fff', borderWidth: 1, borderColor: '#BBF7D0', borderRadius: 10, paddingHorizontal: 12, paddingVertical: 7 },
   editJobBtnText: { color: '#16A34A', fontWeight: '700', fontSize: 13 },
+  deleteJobBtn: { flexDirection: 'row', alignItems: 'center', gap: 5, backgroundColor: '#fff', borderWidth: 1, borderColor: '#FECACA', borderRadius: 10, paddingHorizontal: 12, paddingVertical: 7, marginLeft: 8 },
+  deleteJobBtnText: { color: '#DC2626', fontWeight: '700', fontSize: 13 },
   description: { fontSize: 15, color: '#334155', marginBottom: 12, lineHeight: 22 },
   location: { fontSize: 14, color: '#64748B', marginBottom: 4 },
   urgency: { fontSize: 14, color: '#64748B', marginBottom: 4 },
