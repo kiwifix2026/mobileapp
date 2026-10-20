@@ -1,15 +1,20 @@
-import React, { useCallback, useMemo } from 'react';
+import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { View, Text, Pressable, FlatList, StyleSheet, SafeAreaView, ActivityIndicator, RefreshControl } from 'react-native';
 import type { NativeStackScreenProps } from '@react-navigation/native-stack';
 import { useFocusEffect } from '@react-navigation/native';
 import { useBottomTabBarHeight } from '@react-navigation/bottom-tabs';
 import { useQuery } from '@tanstack/react-query';
 import type { TradieStackParamList } from '../../navigation/types';
+import type { JobApplication } from '../../api/types';
 import { listMyApplications } from '../../api/jobs';
+import { listCalendarEvents } from '../../api/extras';
+import { useSavedJobs } from '../../api/useSavedJobs';
 import { useAuth } from '../../auth/AuthContext';
 import ScreenBackground from '../../components/ScreenBackground';
 
 type Props = NativeStackScreenProps<TradieStackParamList, 'MyApplications'>;
+type Section = 'applications' | 'saved' | 'upcoming';
+type AppFilter = 'all' | 'active' | 'completed';
 
 function statusColor(status: string): string {
   if (status === 'ACCEPTED' || status === 'COMPLETED') return '#16A34A';
@@ -19,141 +24,245 @@ function statusColor(status: string): string {
 
 // The application itself stays 'ACCEPTED' forever once a tradie is picked —
 // completion is tracked on the JOB, not the application (see
-// JobsService.complete). Web's "✅ Completed" pill on tradie-jobs.html
-// reflects `job.status`, not `application.status`, for exactly this reason;
-// showing the raw application status here would permanently read "ACCEPTED"
-// even for a job finished a week ago.
+// JobsService.complete). Web's "✅ Completed" pill reflects `job.status`, not
+// `application.status`, for exactly this reason.
 function displayStatus(item: { status: string; job?: { status: string } | null }): string {
   if (item.status === 'ACCEPTED' && item.job?.status === 'COMPLETED') return 'COMPLETED';
   return item.status;
 }
 
-// `filter` mirrors web's tradie-jobs.html?type=active|completed, reached
-// from the dashboard's stat cards — that page filters to ACCEPTED
-// applications only, then splits by the underlying JOB's status (not the
-// application's own status), same logic BrowseJobsScreen already uses for
-// the stat counts themselves. Keep the two in sync if either changes.
-function applyFilter(applications: import('../../api/types').JobApplication[], filter?: 'active' | 'completed') {
-  if (!filter) return applications;
+// Active/Completed split mirrors web's tradie-jobs.html?type=active|completed
+// and the Home stat cards: ACCEPTED applications only, split by the
+// underlying JOB's status. Keep in sync with BrowseJobsScreen's counts.
+function applyFilter(applications: JobApplication[], filter: AppFilter) {
+  if (filter === 'all') return applications;
   const accepted = applications.filter((a) => a.status === 'ACCEPTED' && a.job);
   return filter === 'completed'
     ? accepted.filter((a) => a.job!.status === 'COMPLETED')
     : accepted.filter((a) => a.job!.status !== 'COMPLETED');
 }
 
+// The Jobs tab: one place for everything a tradie has lined up — their
+// applications (with All / Active / Completed), jobs they saved for later,
+// and upcoming scheduled jobs. Used to be three cards at the bottom of Home.
 export default function MyApplicationsScreen({ route, navigation }: Props) {
   const { session } = useAuth();
-  const filter = route.params?.filter;
-  // Same tab-bar overlap fix as the other tab-bar-visible screens — a long
-  // applications list can otherwise have its last card sit under the tab bar.
+  const email = session!.email;
   const tabBarHeight = useBottomTabBarHeight();
+  const savedJobs = useSavedJobs();
+
+  const [section, setSection] = useState<Section>(route.params?.section ?? 'applications');
+  const [appFilter, setAppFilter] = useState<AppFilter>(route.params?.filter ?? 'all');
+
+  // Home's stat cards open this screen on a specific section/filter.
+  useEffect(() => {
+    if (route.params?.section) setSection(route.params.section);
+    if (route.params?.filter) {
+      setSection('applications');
+      setAppFilter(route.params.filter);
+    } else if (route.params?.section === 'applications') {
+      setAppFilter('all');
+    }
+  }, [route.params?.section, route.params?.filter]);
 
   const { data: applications, isLoading, refetch, isRefetching } = useQuery({
-    queryKey: ['myApplications', session!.email],
-    queryFn: () => listMyApplications(session!.token, session!.email),
+    queryKey: ['myApplications', email],
+    queryFn: () => listMyApplications(session!.token, email),
+  });
+  const { data: events, refetch: refetchEvents } = useQuery({
+    queryKey: ['calendarEvents', email],
+    queryFn: () => listCalendarEvents(session!.token, email),
   });
 
-  // Jobs tab root — stays mounted across tab switches. Notably, a job being
-  // marked complete happens entirely on the JOB POSTER's device
-  // (JobDetailScreen's complete mutation) — there's no trigger on this
-  // tradie's own app at all for that, so without a focus refetch here,
-  // "Jobs Completed" could only ever update via manual pull-to-refresh or a
-  // full app restart. See kiwifix_mobile_stale_bottomtab_screens memory.
+  // Jobs tab root — stays mounted across tab switches, and a job being
+  // marked complete happens on the job poster's device, so refetch on focus.
   useFocusEffect(
     useCallback(() => {
       refetch();
-    }, [refetch]),
+      refetchEvents();
+      savedJobs.refetch();
+      // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [refetch, refetchEvents]),
   );
 
-  const filtered = useMemo(() => applyFilter(applications || [], filter), [applications, filter]);
+  const filteredApps = useMemo(() => applyFilter(applications || [], appFilter), [applications, appFilter]);
+  const upcoming = useMemo(
+    () =>
+      (events || [])
+        .filter((e) => new Date(e.startAt).getTime() >= Date.now() - 60 * 60 * 1000)
+        .sort((a, b) => new Date(a.startAt).getTime() - new Date(b.startAt).getTime()),
+    [events],
+  );
 
-  React.useLayoutEffect(() => {
-    if (filter === 'active') navigation.setOptions({ title: 'Active Jobs' });
-    else if (filter === 'completed') navigation.setOptions({ title: 'Jobs Completed' });
-  }, [filter, navigation]);
+  const refreshAll = () => {
+    refetch();
+    refetchEvents();
+    savedJobs.refetch();
+  };
 
-  const emptyText = filter === 'active'
-    ? 'No active jobs right now — accepted jobs that aren\'t marked complete yet will show up here.'
-    : filter === 'completed'
-      ? 'No completed jobs yet.'
-      : 'You haven\'t applied to any jobs yet.';
+  const emptyApps =
+    appFilter === 'active'
+      ? "No active jobs right now — accepted jobs that aren't marked complete yet will show up here."
+      : appFilter === 'completed'
+        ? 'No completed jobs yet.'
+        : "You haven't applied to any jobs yet.";
 
   return (
     <ScreenBackground>
-    <SafeAreaView style={styles.safe}>
-      {isLoading ? (
-        <ActivityIndicator style={{ marginTop: 40 }} />
-      ) : (
-        <FlatList
-          data={filtered}
-          keyExtractor={(a) => a.id}
-          contentContainerStyle={[styles.list, { paddingBottom: tabBarHeight + 20 }]}
-          refreshControl={<RefreshControl refreshing={isRefetching} onRefresh={refetch} />}
-          ListEmptyComponent={<Text style={styles.empty}>{emptyText}</Text>}
-          renderItem={({ item }) => {
-            const shownStatus = displayStatus(item);
-            return (
-            // Tappable regardless of status — web's tradie-jobs.html cards
-            // (and the my-applications modal) all link through to the job's
-            // own detail page, whether it's still open, matched/active, or
-            // completed. TradieJobDetailScreen already fetches via
-            // getMatchingJob, which — confirmed against
-            // JobsService.findOneForTradie — deliberately doesn't gate on
-            // job.status, so a MATCHED or COMPLETED job still returns full
-            // detail (including the revealed address) for the tradie who
-            // was accepted on it.
-            <Pressable
-              style={styles.card}
-              // JobApplicationsService.listForTradie (the endpoint backing
-              // this screen) never puts jobId at the top level of each
-              // application — only inside the nested `job` object it
-              // remaps in (job.id). The JobApplication type's top-level
-              // `jobId` field only actually exists on the job-poster-side
-              // listApplicants response (raw Prisma records), not this
-              // one — using item.jobId here was silently undefined,
-              // which used to hang forever on the old spinner-with-no-
-              // error-branch bug and now correctly, but wrongly, shows
-              // "Job not found." Use item.job.id, which this endpoint
-              // always actually sends.
-              onPress={() => item.job?.id && navigation.navigate('TradieJobDetail', { jobId: item.job.id })}
-            >
-              <View style={styles.cardTop}>
-                <Text style={styles.cardCategory} numberOfLines={1}>{item.job?.category || 'Job'}</Text>
-                <Text style={[styles.status, { color: statusColor(shownStatus) }]}>
-                  {shownStatus === 'COMPLETED' ? '✅ Completed' : shownStatus}
+      <SafeAreaView style={styles.safe}>
+        {/* Section switch */}
+        <View style={styles.segment}>
+          <SegmentBtn label="Applications" count={applications?.length} active={section === 'applications'} onPress={() => setSection('applications')} />
+          <SegmentBtn label="Saved" count={savedJobs.saved.length} active={section === 'saved'} onPress={() => setSection('saved')} />
+          <SegmentBtn label="Upcoming" count={upcoming.length} active={section === 'upcoming'} onPress={() => setSection('upcoming')} />
+        </View>
+
+        {section === 'applications' && (
+          <View style={styles.chips}>
+            {(['all', 'active', 'completed'] as AppFilter[]).map((f) => (
+              <Pressable key={f} onPress={() => setAppFilter(f)} style={[styles.chip, appFilter === f && styles.chipActive]}>
+                <Text style={[styles.chipText, appFilter === f && styles.chipTextActive]}>
+                  {f === 'all' ? 'All' : f === 'active' ? 'Active' : 'Completed'}
                 </Text>
-              </View>
-              {item.job?.description && <Text style={styles.cardDescription} numberOfLines={2}>{item.job.description}</Text>}
-              {item.status === 'ACCEPTED' && item.job?.address && (
-                <Text style={styles.revealedAddress}>📍 {item.job.address}</Text>
+              </Pressable>
+            ))}
+          </View>
+        )}
+
+        {section === 'applications' ? (
+          isLoading ? (
+            <ActivityIndicator style={{ marginTop: 40 }} />
+          ) : (
+            <FlatList
+              data={filteredApps}
+              keyExtractor={(a) => a.id}
+              contentContainerStyle={[styles.list, { paddingBottom: tabBarHeight + 20 }]}
+              refreshControl={<RefreshControl refreshing={isRefetching} onRefresh={refreshAll} />}
+              ListEmptyComponent={<Text style={styles.empty}>{emptyApps}</Text>}
+              renderItem={({ item }) => {
+                const shownStatus = displayStatus(item);
+                return (
+                  // JobApplicationsService.listForTradie never sends a
+                  // top-level jobId — only the nested job.id. Using
+                  // item.jobId here silently produced "Job not found."
+                  <Pressable
+                    style={styles.card}
+                    onPress={() => item.job?.id && navigation.navigate('TradieJobDetail', { jobId: item.job.id })}
+                  >
+                    <View style={styles.cardTop}>
+                      <Text style={styles.cardCategory} numberOfLines={1}>{item.job?.category || 'Job'}</Text>
+                      <Text style={[styles.status, { color: statusColor(shownStatus) }]}>
+                        {shownStatus === 'COMPLETED' ? '✅ Completed' : shownStatus}
+                      </Text>
+                    </View>
+                    {item.job?.description && <Text style={styles.cardDescription} numberOfLines={2}>{item.job.description}</Text>}
+                    {item.status === 'ACCEPTED' && item.job?.address && (
+                      <Text style={styles.revealedAddress}>📍 {item.job.address}</Text>
+                    )}
+                    {item.message ? <Text style={styles.message}>Your note: "{item.message}"</Text> : null}
+                    <Text style={styles.detailsLink}>View full details →</Text>
+                  </Pressable>
+                );
+              }}
+            />
+          )
+        ) : section === 'saved' ? (
+          savedJobs.isLoading ? (
+            <ActivityIndicator style={{ marginTop: 40 }} />
+          ) : (
+            <FlatList
+              data={savedJobs.saved}
+              keyExtractor={(j) => j.id}
+              contentContainerStyle={[styles.list, { paddingBottom: tabBarHeight + 20 }]}
+              refreshControl={<RefreshControl refreshing={false} onRefresh={refreshAll} />}
+              ListEmptyComponent={<Text style={styles.empty}>No saved jobs yet — tap ☆ Save on a job to keep it here for later.</Text>}
+              renderItem={({ item }) => (
+                <Pressable style={styles.savedCard} onPress={() => navigation.navigate('TradieJobDetail', { jobId: item.id })}>
+                  <View style={{ flex: 1 }}>
+                    <Text style={styles.cardCategory}>{item.category}</Text>
+                    <Text style={styles.cardDescription} numberOfLines={2}>{item.description}</Text>
+                    {(item.suburb || item.city) && <Text style={styles.loc}>📍 {[item.suburb, item.city].filter(Boolean).join(', ')}</Text>}
+                    {item.status !== 'OPEN' && <Text style={styles.closed}>No longer open</Text>}
+                  </View>
+                  <Pressable hitSlop={8} onPress={() => savedJobs.toggle(item.id)} style={styles.unsaveBtn}>
+                    <Text style={styles.unsaveText}>★ Saved</Text>
+                  </Pressable>
+                </Pressable>
               )}
-              {item.message ? <Text style={styles.message}>Your note: "{item.message}"</Text> : null}
-              <Text style={styles.detailsLink}>View full details →</Text>
-            </Pressable>
-            );
-          }}
-        />
-      )}
-    </SafeAreaView>
+            />
+          )
+        ) : (
+          <FlatList
+            data={upcoming}
+            keyExtractor={(e) => e.id}
+            contentContainerStyle={[styles.list, { paddingBottom: tabBarHeight + 20 }]}
+            refreshControl={<RefreshControl refreshing={false} onRefresh={refreshAll} />}
+            ListEmptyComponent={
+              <Text style={styles.empty}>Nothing scheduled yet — open an accepted job and tap "Add to my phone calendar".</Text>
+            }
+            renderItem={({ item }) => (
+              <Pressable style={styles.card} onPress={() => navigation.navigate('TradieJobDetail', { jobId: item.jobId })}>
+                <Text style={styles.cardCategory} numberOfLines={1}>{item.title}</Text>
+                <Text style={styles.when}>
+                  📅 {new Date(item.startAt).toLocaleString('en-NZ', { weekday: 'long', day: 'numeric', month: 'short', hour: 'numeric', minute: '2-digit' })}
+                </Text>
+                {item.location ? <Text style={styles.loc}>📍 {item.location}</Text> : null}
+                <Text style={styles.detailsLink}>View job →</Text>
+              </Pressable>
+            )}
+          />
+        )}
+      </SafeAreaView>
     </ScreenBackground>
   );
 }
 
+function SegmentBtn({ label, count, active, onPress }: { label: string; count?: number; active: boolean; onPress: () => void }) {
+  return (
+    <Pressable style={[styles.segBtn, active && styles.segBtnActive]} onPress={onPress}>
+      <Text style={[styles.segText, active && styles.segTextActive]}>
+        {label}{count !== undefined ? ` (${count})` : ''}
+      </Text>
+    </Pressable>
+  );
+}
+
+const SHADOW = {
+  shadowColor: '#0F172A', shadowOpacity: 0.06, shadowRadius: 12, shadowOffset: { width: 0, height: 4 }, elevation: 2,
+};
+
 const styles = StyleSheet.create({
   safe: { flex: 1 },
-  list: { padding: 16, paddingTop: 20 },
-  empty: { fontSize: 14, color: '#475569', fontWeight: '500', textAlign: 'center', marginTop: 60 },
-  card: {
-    backgroundColor: 'rgba(255,255,255,0.94)', borderRadius: 16, padding: 16, marginBottom: 12,
-    shadowColor: '#0F172A', shadowOpacity: 0.06, shadowRadius: 12, shadowOffset: { width: 0, height: 4 }, elevation: 2,
+  segment: {
+    flexDirection: 'row', backgroundColor: '#E2E8F0', borderRadius: 14, padding: 4,
+    marginHorizontal: 16, marginTop: 14,
   },
-  // Same fix as the poster-side Home/MyJobs cards — a long job category
-  // used to push the status text off the card with no way to shrink/wrap.
+  segBtn: { flex: 1, paddingVertical: 9, borderRadius: 11, alignItems: 'center' },
+  segBtnActive: { backgroundColor: '#fff', ...SHADOW },
+  segText: { fontSize: 13, fontWeight: '700', color: '#64748B' },
+  segTextActive: { color: '#15803D' },
+  chips: { flexDirection: 'row', gap: 8, marginHorizontal: 16, marginTop: 12 },
+  chip: { borderWidth: 1, borderColor: '#CBD5E1', backgroundColor: '#fff', borderRadius: 16, paddingHorizontal: 14, paddingVertical: 6 },
+  chipActive: { backgroundColor: '#DCFCE7', borderColor: '#86EFAC' },
+  chipText: { fontSize: 13, fontWeight: '700', color: '#64748B' },
+  chipTextActive: { color: '#15803D' },
+  list: { padding: 16, paddingTop: 14 },
+  empty: { fontSize: 14, color: '#475569', fontWeight: '500', textAlign: 'center', marginTop: 60, paddingHorizontal: 24 },
+  card: { backgroundColor: 'rgba(255,255,255,0.96)', borderRadius: 16, padding: 16, marginBottom: 12, ...SHADOW },
+  savedCard: {
+    flexDirection: 'row', alignItems: 'flex-start', gap: 10, backgroundColor: 'rgba(255,255,255,0.96)',
+    borderRadius: 16, padding: 16, marginBottom: 12, ...SHADOW,
+  },
   cardTop: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 6 },
-  cardCategory: { fontSize: 16, fontWeight: '700', flex: 1, marginRight: 8 },
+  cardCategory: { fontSize: 16, fontWeight: '700', flex: 1, marginRight: 8, color: '#0F172A' },
   status: { fontSize: 12, fontWeight: '700', flexShrink: 0 },
-  cardDescription: { fontSize: 14, color: '#475569', marginBottom: 6 },
+  cardDescription: { fontSize: 14, color: '#475569', marginTop: 4, marginBottom: 6 },
   revealedAddress: { fontSize: 13, color: '#16A34A', fontWeight: '600', marginTop: 4 },
   message: { fontSize: 13, color: '#94A3B8', fontStyle: 'italic', marginTop: 6 },
   detailsLink: { color: '#2563EB', fontWeight: '600', fontSize: 13, marginTop: 10 },
+  loc: { fontSize: 13, color: '#64748B', marginTop: 4 },
+  when: { fontSize: 14, color: '#15803D', fontWeight: '700', marginTop: 6 },
+  closed: { fontSize: 12, color: '#B45309', fontWeight: '700', marginTop: 6 },
+  unsaveBtn: { backgroundColor: '#F0FDF4', borderWidth: 1, borderColor: '#BBF7D0', borderRadius: 10, paddingHorizontal: 10, paddingVertical: 6 },
+  unsaveText: { color: '#16A34A', fontWeight: '700', fontSize: 12 },
 });

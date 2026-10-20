@@ -179,7 +179,7 @@ export default function EditJobScreen({ route, navigation }: Props) {
 
   if (isError) {
     return (
-      <ScreenBackground>
+      <ScreenBackground plain>
       <SafeAreaView style={styles.safe}>
         <View style={styles.errorState}>
           <Text style={styles.errorStateText}>
@@ -196,7 +196,7 @@ export default function EditJobScreen({ route, navigation }: Props) {
   }
   if (isLoading || !job) {
     return (
-      <ScreenBackground>
+      <ScreenBackground plain>
       <SafeAreaView style={styles.safe}>
         <ActivityIndicator style={{ marginTop: 40 }} />
       </SafeAreaView>
@@ -205,7 +205,7 @@ export default function EditJobScreen({ route, navigation }: Props) {
   }
 
   return (
-    <ScreenBackground>
+    <ScreenBackground plain>
     <SafeAreaView style={styles.safe}>
       <View style={styles.header}>
         <Pressable onPress={() => navigation.goBack()} hitSlop={12}>

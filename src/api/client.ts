@@ -2,7 +2,12 @@
 // the same backend the web app (kififix-forntend) and admin portal
 // (kiwifix-admin) already talk to. No separate mobile API, just a new
 // client for the API that already exists.
-export const API_BASE = 'https://api.kiwifix.nz';
+// Set per build profile in eas.json (EXPO_PUBLIC_API_BASE). Falls back to dev
+// when running locally (`expo start`) and prod for any release build with no
+// explicit value, so a local run can never touch production data by accident.
+export const API_BASE: string =
+  process.env.EXPO_PUBLIC_API_BASE ||
+  (__DEV__ ? 'https://dev.api.kiwifix.nz' : 'https://api.kiwifix.nz');
 
 export class ApiError extends Error {
   status: number;

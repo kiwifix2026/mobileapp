@@ -37,7 +37,7 @@ export default function ProfileScreen({ navigation }: Props) {
   const initials = (((profile?.firstName || '')[0] || '') + ((profile?.lastName || '')[0] || '')) || (session?.email?.[0] || '?');
 
   return (
-    <ScreenBackground>
+    <ScreenBackground plain>
       <SafeAreaView style={styles.safe}>
         <ScrollView contentContainerStyle={styles.container}>
           <View style={styles.avatarRing}>

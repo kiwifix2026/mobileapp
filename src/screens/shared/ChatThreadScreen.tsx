@@ -87,7 +87,7 @@ export default function ChatThreadScreen({ route, navigation }: Props) {
   const mySenderType = role === 'customer' ? 'CUSTOMER' : 'TRADIE';
 
   return (
-    <ScreenBackground>
+    <ScreenBackground plain={role === 'customer'}>
     <KeyboardAvoidingView
       style={styles.flex}
       behavior={Platform.OS === 'ios' ? 'padding' : undefined}

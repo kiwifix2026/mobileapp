@@ -36,6 +36,18 @@
           "photosPermission": "KiwiFix needs access to your photos so you can attach pictures to jobs and your profile."
         }
       ],
+      [
+        "expo-calendar",
+        {
+          "calendarPermission": "KiwiFix adds your accepted jobs to your phone's calendar so you don't miss them."
+        }
+      ],
+      [
+        "expo-notifications",
+        {
+          "color": "#16A34A"
+        }
+      ],
       "expo-font",
       "expo-secure-store",
       "expo-status-bar"

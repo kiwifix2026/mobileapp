@@ -87,7 +87,28 @@ export default function PostJobScreen({ navigation }: Props) {
       return true;
     });
   }, [approvedTrades]);
-  const featuredLabels = useMemo(() => new Set(featured.map((t) => t.jobLabel)), [featured]);
+  // The grid always shows TILE_COUNT category tiles and then "Other". The
+  // catalog's "featured for job posters" flag currently only marks 9 trades,
+  // so the grid is topped up from the next regular trades in catalog order
+  // until it reaches 11. Anything beyond the 11 lives under "Other". (To
+  // control exactly which 11 appear, flag them as featured in the admin
+  // trade catalog — web and mobile will then agree.)
+  const TILE_COUNT = 11;
+  const tiles = useMemo(() => {
+    if (featured.length >= TILE_COUNT) return featured.slice(0, TILE_COUNT);
+    const seen = new Set(featured.map((t) => t.jobLabel));
+    const topUp: typeof featured = [];
+    for (const t of approvedTrades || []) {
+      if (featured.length + topUp.length >= TILE_COUNT) break;
+      if (t.searchOnly || seen.has(t.jobLabel)) continue;
+      seen.add(t.jobLabel);
+      topUp.push(t);
+    }
+    return [...featured, ...topUp];
+  }, [featured, approvedTrades]);
+  // Labels already shown as tiles (name kept: it gates the "Other" list and
+  // the "picked something outside the tiles" check below).
+  const featuredLabels = useMemo(() => new Set(tiles.map((t) => t.jobLabel)), [tiles]);
 
   const extraCategories = useMemo(() => {
     const seen = new Set<string>();
@@ -261,7 +282,7 @@ export default function PostJobScreen({ navigation }: Props) {
   }
 
   return (
-    <ScreenBackground>
+    <ScreenBackground plain>
     <SafeAreaView style={styles.safe}>
       <View style={styles.stepperHeader}>
         <Pressable onPress={goBack}><Text style={styles.backArrow}>←</Text></Pressable>
@@ -308,7 +329,7 @@ export default function PostJobScreen({ navigation }: Props) {
             </View>
 
             <View style={styles.grid}>
-              {featured.map((t) => (
+              {tiles.map((t) => (
                 <Pressable
                   key={t.name}
                   style={[styles.tile, category === t.jobLabel && styles.tileActive]}

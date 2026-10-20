@@ -7,18 +7,29 @@
     "development": {
       "developmentClient": true,
       "distribution": "internal",
+      "env": { "EXPO_PUBLIC_API_BASE": "https://dev.api.kiwifix.nz" },
       "android": {
         "buildType": "apk"
       }
     },
     "preview": {
       "distribution": "internal",
+      "env": { "EXPO_PUBLIC_API_BASE": "https://dev.api.kiwifix.nz" },
       "android": {
         "buildType": "apk"
       }
     },
+    "playtest": {
+      "autoIncrement": true,
+      "distribution": "store",
+      "env": { "EXPO_PUBLIC_API_BASE": "https://dev.api.kiwifix.nz" },
+      "android": {
+        "buildType": "app-bundle"
+      }
+    },
     "production": {
-      "autoIncrement": true
+      "autoIncrement": true,
+      "env": { "EXPO_PUBLIC_API_BASE": "https://api.kiwifix.nz" }
     }
   },
   "submit": {

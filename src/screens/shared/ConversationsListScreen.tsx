@@ -59,7 +59,7 @@ export default function ConversationsListScreen({ navigation }: Props) {
   );
 
   return (
-    <ScreenBackground>
+    <ScreenBackground plain={role === 'customer'}>
     <SafeAreaView style={styles.safe}>
       {isLoading ? (
         <ActivityIndicator style={{ marginTop: 40 }} />

@@ -59,15 +59,17 @@ export type TradieStackParamList = {
   // reached by tapping the "Active Jobs"/"Jobs Completed" stat cards on the
   // dashboard. Omitted (plain navigation from the Jobs tab) shows everything,
   // same as before.
-  MyApplications: { filter?: 'active' | 'completed' } | undefined;
+  // `section` picks which part of the Jobs tab opens (Applications / Saved /
+  // Upcoming) — the Home stat cards deep-link into these.
+  MyApplications: { filter?: 'active' | 'completed'; section?: 'applications' | 'saved' | 'upcoming' } | undefined;
   TradieJobInvites: undefined;
   Notifications: undefined;
   EditProfile: undefined;
   ViewProfile: undefined;
   ProfileMenu: undefined;
-  // Mirrors web's tradie-dashboard "Saved Jobs" card and tradie-calendar.html.
+  // Mirrors web's tradie-dashboard "Saved Jobs" card. (No in-app Calendar:
+  // jobs are added to the phone's own calendar instead.)
   SavedJobs: undefined;
-  Calendar: undefined;
 } & ChatStackParams;
 
 export type TradieTabParamList = {

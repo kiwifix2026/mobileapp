@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { View, Text, TextInput, Pressable, StyleSheet, SafeAreaView, ScrollView, ActivityIndicator, Image, Modal } from 'react-native';
+import { View, Text, TextInput, Pressable, StyleSheet, SafeAreaView, ScrollView, ActivityIndicator, Image, Modal, KeyboardAvoidingView, Platform } from 'react-native';
 import type { NativeStackScreenProps } from '@react-navigation/native-stack';
 import { useBottomTabBarHeight } from '@react-navigation/bottom-tabs';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
@@ -14,6 +14,7 @@ import ScreenBackground from '../../components/ScreenBackground';
 import DateTimeField from '../../components/DateTimeField';
 import { useSavedJobs } from '../../api/useSavedJobs';
 import { createCalendarEvent } from '../../api/extras';
+import { addToPhoneCalendar } from '../../utils/deviceCalendar';
 
 type Props = NativeStackScreenProps<TradieStackParamList, 'TradieJobDetail'>;
 
@@ -118,19 +119,37 @@ export default function TradieJobDetailScreen({ route, navigation }: Props) {
   const [calError, setCalError] = useState<string | null>(null);
   const [calDone, setCalDone] = useState(false);
   const addToCalendar = useMutation({
-    mutationFn: () =>
-      createCalendarEvent(session!.token, session!.email, {
-        jobId,
-        startAt: calStart.toISOString(),
-        endAt: calEnd ? calEnd.toISOString() : undefined,
+    mutationFn: async () => {
+      // 1. Put the event in the phone's own calendar app (the one this
+      //    person already uses) — this is the real calendar now.
+      await addToPhoneCalendar({
+        title: `${job?.category || 'Job'} – KiwiFix`,
+        start: calStart,
+        end: calEnd,
+        location: [job?.address, job?.suburb, job?.city].filter(Boolean).join(', '),
         notes: calNotes.trim() || undefined,
-      }),
+      });
+      // 2. Also record it with KiwiFix so the dashboard's "Upcoming Jobs"
+      //    list (and the web calendar) stay in sync. Best effort only — the
+      //    phone calendar entry above is what matters if this fails.
+      try {
+        await createCalendarEvent(session!.token, session!.email, {
+          jobId,
+          startAt: calStart.toISOString(),
+          endAt: calEnd ? calEnd.toISOString() : undefined,
+          notes: calNotes.trim() || undefined,
+        });
+      } catch {
+        /* ignore */
+      }
+    },
     onSuccess: () => {
       setCalOpen(false);
       setCalDone(true);
       queryClient.invalidateQueries({ queryKey: ['calendarEvents', session!.email] });
     },
-    onError: (err) => setCalError(err instanceof ApiError ? err.message : 'Could not add to calendar.'),
+    onError: (err) =>
+      setCalError(err instanceof ApiError || err instanceof Error ? err.message : 'Could not add to calendar.'),
   });
 
   // Same bug class fixed on the poster side's JobDetailScreen: this used to
@@ -234,7 +253,7 @@ export default function TradieJobDetailScreen({ route, navigation }: Props) {
 
         {job.myApplicationStatus === 'accepted' && (
           <Pressable style={styles.calendarBtn} onPress={() => { setCalError(null); setCalOpen(true); }}>
-            <Text style={styles.calendarBtnText}>{calDone ? '✓ Added — add another time' : '📅 Add to calendar'}</Text>
+            <Text style={styles.calendarBtnText}>{calDone ? '✓ Added to your calendar — add another time' : '📅 Add to my phone calendar'}</Text>
           </Pressable>
         )}
 
@@ -272,9 +291,13 @@ export default function TradieJobDetailScreen({ route, navigation }: Props) {
       </ScrollView>
 
       <Modal visible={calOpen} transparent animationType="slide" onRequestClose={() => setCalOpen(false)}>
-        <View style={styles.modalOverlay}>
-          <View style={styles.modalSheet}>
-            <Text style={styles.modalTitle}>Add to calendar</Text>
+        {/* KeyboardAvoidingView lifts the sheet above the on-screen keyboard
+            (it used to slide underneath it, hiding Notes and the Add
+            button); the ScrollView keeps everything reachable on short
+            screens. */}
+        <KeyboardAvoidingView style={styles.modalOverlay} behavior={Platform.OS === 'ios' ? 'padding' : 'height'}>
+          <ScrollView style={styles.modalSheet} keyboardShouldPersistTaps="handled" bounces={false}>
+            <Text style={styles.modalTitle}>Add to my phone calendar</Text>
             <DateTimeField label="Starts" value={calStart} onChange={setCalStart} />
             <View style={{ height: 12 }} />
             {calEnd ? (
@@ -302,8 +325,8 @@ export default function TradieJobDetailScreen({ route, navigation }: Props) {
                 <Text style={styles.modalSaveText}>{addToCalendar.isPending ? 'Adding…' : 'Add'}</Text>
               </Pressable>
             </View>
-          </View>
-        </View>
+          </ScrollView>
+        </KeyboardAvoidingView>
       </Modal>
     </SafeAreaView>
     </ScreenBackground>
@@ -318,7 +341,7 @@ const styles = StyleSheet.create({
   calendarBtn: { backgroundColor: '#F0FDF4', borderWidth: 1, borderColor: '#BBF7D0', borderRadius: 12, paddingVertical: 14, alignItems: 'center', marginTop: 12 },
   calendarBtnText: { color: '#16A34A', fontWeight: '700', fontSize: 15 },
   modalOverlay: { flex: 1, backgroundColor: 'rgba(15,23,42,0.4)', justifyContent: 'flex-end' },
-  modalSheet: { backgroundColor: '#fff', borderTopLeftRadius: 20, borderTopRightRadius: 20, padding: 20, paddingBottom: 32 },
+  modalSheet: { backgroundColor: '#fff', borderTopLeftRadius: 20, borderTopRightRadius: 20, padding: 20, paddingBottom: 32, flexGrow: 0, maxHeight: '90%' },
   modalTitle: { fontSize: 18, fontWeight: '800', marginBottom: 14, color: '#14251B' },
   modalLabel: { fontSize: 13, fontWeight: '700', color: '#334155', marginTop: 12, marginBottom: 6 },
   modalLink: { color: '#2563EB', fontWeight: '600', fontSize: 13, marginTop: 8 },

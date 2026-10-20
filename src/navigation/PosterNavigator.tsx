@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useEffect } from 'react';
 import { Ionicons } from '@expo/vector-icons';
 import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
 import { createNativeStackNavigator } from '@react-navigation/native-stack';
@@ -14,6 +14,7 @@ import ProfileScreen from '../screens/poster/ProfileScreen';
 import EditPosterProfileScreen from '../screens/poster/EditPosterProfileScreen';
 import { PosterNotificationsScreen, KiwiFixInboxScreen } from '../screens/poster/PosterInboxScreens';
 import { useCustomerUnread } from '../api/useCustomerUnread';
+import { ensureNotificationPermission, useNotifyOnIncrease } from '../notifications/deviceNotifications';
 import ConversationsListScreen from '../screens/shared/ConversationsListScreen';
 import ChatThreadScreen from '../screens/shared/ChatThreadScreen';
 import { getConversationsUnreadCount } from '../api/conversations';
@@ -111,6 +112,14 @@ export default function PosterNavigator() {
   // pinned KiwiFix thread badges) add to the Messages tab total.
   const customerUnread = useCustomerUnread();
   const messagesBadge = (unreadCount || 0) + customerUnread.notifications + customerUnread.kiwifix;
+
+  // Native phone notifications (instead of an in-app bell): ask permission
+  // once, then fire a notification whenever one of these counts goes up.
+  // The lists themselves are in the Messages tab (KiwiFix + Notifications).
+  useEffect(() => { ensureNotificationPermission(); }, []);
+  useNotifyOnIncrease(unreadCount, 'New message on KiwiFix', (n) => (n === 1 ? 'A tradie sent you a message' : `You have ${n} new messages`));
+  useNotifyOnIncrease(customerUnread.loaded ? customerUnread.notifications : undefined, 'KiwiFix', (n) => (n === 1 ? 'You have a new notification' : `You have ${n} new notifications`));
+  useNotifyOnIncrease(customerUnread.loaded ? customerUnread.kiwifix : undefined, 'Message from KiwiFix', (n) => (n === 1 ? 'The KiwiFix team sent you a message' : `${n} new messages from the KiwiFix team`));
 
   return (
     <Tab.Navigator

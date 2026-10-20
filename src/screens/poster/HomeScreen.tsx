@@ -1,5 +1,6 @@
 import React, { useCallback, useMemo } from 'react';
-import { View, Text, Pressable, StyleSheet, SafeAreaView, ScrollView, ActivityIndicator, RefreshControl } from 'react-native';
+import { View, Text, Pressable, StyleSheet, ScrollView, ActivityIndicator, RefreshControl } from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import type { NativeStackScreenProps } from '@react-navigation/native-stack';
 import { useFocusEffect } from '@react-navigation/native';
 import { useQuery } from '@tanstack/react-query';
@@ -10,7 +11,6 @@ import { getApprovedTrades, ApprovedTrade } from '../../api/trades';
 import { useAuth } from '../../auth/AuthContext';
 import type { Job } from '../../api/types';
 import ScreenBackground from '../../components/ScreenBackground';
-import { useCustomerUnread } from '../../api/useCustomerUnread';
 
 type Props = NativeStackScreenProps<PosterStackParamList, 'Home'>;
 
@@ -94,17 +94,17 @@ export default function HomeScreen({ navigation }: Props) {
     }, [refetch]),
   );
 
-  const unread = useCustomerUnread();
+  const insets = useSafeAreaInsets();
   const hour = new Date().getHours();
   const greeting = hour < 12 ? 'Good morning' : hour < 18 ? 'Good afternoon' : 'Good evening';
   const recent = (jobs || []).slice(0, 3);
   const activeCount = (jobs || []).filter((j) => j.status === 'OPEN' || j.status === 'MATCHED').length;
 
   return (
-    <ScreenBackground>
-    <SafeAreaView style={styles.safe}>
+    <ScreenBackground plain>
+    <View style={styles.safe}>
       <ScrollView
-        contentContainerStyle={styles.scroll}
+        contentContainerStyle={[styles.scroll, { paddingTop: insets.top + 16 }]}
         refreshControl={<RefreshControl refreshing={isRefetching} onRefresh={refetch} />}
       >
         <View style={styles.headerRow}>
@@ -112,17 +112,6 @@ export default function HomeScreen({ navigation }: Props) {
             <Text style={styles.greeting}>{greeting} 👋</Text>
             <Text style={styles.greetingSub}>What do you need done today?</Text>
           </View>
-          {/* Web's dashboard bell — notifications + KiwiFix-team messages. */}
-          <Pressable style={styles.bellBtn} hitSlop={8} onPress={() => navigation.navigate('PosterNotifications')}>
-            <Text style={styles.bellIcon}>🔔</Text>
-            {unread.notifications + unread.kiwifix > 0 && (
-              <View style={styles.bellBadge}>
-                <Text style={styles.bellBadgeText}>
-                  {unread.notifications + unread.kiwifix > 9 ? '9+' : unread.notifications + unread.kiwifix}
-                </Text>
-              </View>
-            )}
-          </Pressable>
         </View>
 
         <Pressable style={styles.postCard} onPress={() => navigation.navigate('PostJob')}>
@@ -175,17 +164,13 @@ export default function HomeScreen({ navigation }: Props) {
           ))
         )}
       </ScrollView>
-    </SafeAreaView>
+    </View>
     </ScreenBackground>
   );
 }
 
 const styles = StyleSheet.create({
   headerRow: { flexDirection: 'row', alignItems: 'flex-start' },
-  bellBtn: { width: 40, height: 40, borderRadius: 20, backgroundColor: 'rgba(255,255,255,0.94)', alignItems: 'center', justifyContent: 'center' },
-  bellIcon: { fontSize: 18 },
-  bellBadge: { position: 'absolute', top: -2, right: -2, backgroundColor: '#DC2626', borderRadius: 9, minWidth: 18, height: 18, alignItems: 'center', justifyContent: 'center', paddingHorizontal: 4 },
-  bellBadgeText: { color: '#fff', fontSize: 10, fontWeight: '800' },
   safe: { flex: 1 },
   scroll: { padding: 20, paddingBottom: 40 },
   greeting: { fontSize: 24, fontWeight: '800', color: '#0F172A' },

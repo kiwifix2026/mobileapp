@@ -153,7 +153,7 @@ export default function EditPosterProfileScreen({ navigation }: Props) {
   const initials = (((firstName || '')[0] || '') + ((lastName || '')[0] || '')) || (session?.email?.[0] || '?');
 
   return (
-    <ScreenBackground>
+    <ScreenBackground plain>
       <SafeAreaView style={styles.safe}>
         {isLoading ? (
           <ActivityIndicator style={{ marginTop: 40 }} />

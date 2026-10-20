@@ -105,7 +105,7 @@ export default function MyJobsScreen({ navigation }: Props) {
   }, [jobs, filter]);
 
   return (
-    <ScreenBackground>
+    <ScreenBackground plain>
     <SafeAreaView style={styles.safe}>
       <View style={styles.header}>
         <Text style={styles.headerTitle}>My Jobs</Text>

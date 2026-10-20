@@ -463,7 +463,7 @@ export default function JobDetailScreen({ route, navigation }: Props) {
   // with no visible error and no way to retry. Split that out explicitly.
   if (jobIsError) {
     return (
-      <ScreenBackground>
+      <ScreenBackground plain>
       <SafeAreaView style={styles.safe}>
         <View style={styles.errorState}>
           <Text style={styles.errorStateText}>
@@ -480,7 +480,7 @@ export default function JobDetailScreen({ route, navigation }: Props) {
   }
   if (jobLoading || !job) {
     return (
-      <ScreenBackground>
+      <ScreenBackground plain>
       <SafeAreaView style={styles.safe}>
         <ActivityIndicator style={{ marginTop: 40 }} />
       </SafeAreaView>
@@ -489,7 +489,7 @@ export default function JobDetailScreen({ route, navigation }: Props) {
   }
 
   return (
-    <ScreenBackground>
+    <ScreenBackground plain>
     <SafeAreaView style={styles.safe}>
       <ScrollView contentContainerStyle={[styles.container, { paddingBottom: tabBarHeight + 40 }]}>
         <View style={styles.titleRow}>

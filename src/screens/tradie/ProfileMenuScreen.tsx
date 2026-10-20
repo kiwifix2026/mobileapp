@@ -136,11 +136,11 @@ export default function ProfileMenuScreen({ navigation }: Props) {
               onPress={() => navigation.navigate('SavedJobs')}
             />
             <MenuRow
-              icon={<Ionicons name="calendar-outline" size={22} color="#16A34A" />}
+              icon={<Ionicons name="notifications-outline" size={22} color="#16A34A" />}
               iconTint="rgba(22,163,74,0.12)"
-              title="Calendar"
-              subtitle="Your scheduled jobs"
-              onPress={() => navigation.navigate('Calendar')}
+              title="Notifications"
+              subtitle="Approval updates, invites and job notices"
+              onPress={() => navigation.navigate('Notifications')}
               isLast
             />
           </View>

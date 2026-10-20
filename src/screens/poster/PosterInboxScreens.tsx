@@ -29,7 +29,7 @@ function MessageList({
   kiwifix?: boolean;
 }) {
   return (
-    <ScreenBackground>
+    <ScreenBackground plain>
       <SafeAreaView style={styles.safe}>
         {isLoading ? (
           <ActivityIndicator style={{ marginTop: 40 }} />

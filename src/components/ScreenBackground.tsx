@@ -12,10 +12,16 @@ import { ImageBackground, View, StyleSheet, ViewStyle } from 'react-native';
 export default function ScreenBackground({
   children,
   style,
+  plain,
 }: {
   children: React.ReactNode;
   style?: ViewStyle;
+  // plain = flat light background, no fern image (used on the job-poster side).
+  plain?: boolean;
 }) {
+  if (plain) {
+    return <View style={[styles.plain, style]}>{children}</View>;
+  }
   return (
     <ImageBackground
       source={require('../../assets/app-fern-bg.png')}
@@ -28,6 +34,7 @@ export default function ScreenBackground({
 }
 
 const styles = StyleSheet.create({
+  plain: { flex: 1, backgroundColor: '#F6F8FB' },
   bg: { flex: 1, backgroundColor: '#F8FAFC' },
   // rgba white scrim over the image — high opacity keeps the fern pattern
   // barely visible (a faint texture) rather than the previous fully-opaque

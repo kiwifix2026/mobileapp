@@ -25,5 +25,7 @@ export function useCustomerUnread() {
     refetchInterval: 20000,
   });
 
-  return data || { notifications: 0, kiwifix: 0 };
+  // `loaded` lets callers tell "still loading" from a real zero (the device
+  // notification hook must not treat the first load as new activity).
+  return data ? { ...data, loaded: true } : { notifications: 0, kiwifix: 0, loaded: false };
 }
